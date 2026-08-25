@@ -115,17 +115,18 @@ Useful benchmark options:
 ```
 
 Total cycles are measured with Linux perf hardware counters. The existing
-`selected_cycles` instrumentation is reported separately when a kernel uses
-it. Results include minimum/median cycles, FMA per cycle, peak utilization,
-and an output checksum.
+`selected_cycles` tools remain available for temporary hot-region analysis and
+are reported separately when a kernel uses them. No kernel is permanently
+instrumented by default. Results include minimum/median cycles, FMA per cycle,
+peak utilization, and an output checksum.
 
 The current large-shape performance baseline is recorded in
 [`docs/baseline-2026-08-25.md`](docs/baseline-2026-08-25.md).
 
-`kernels/llama_dispatch/ime1_kernels.cpp` also contains an existing inline-assembly measurement around
-`SQ4BIT_KERNEL_COMP_4x16x16`. It accumulates directly into `selected_cycles`;
-the benchmark resets the accumulator after warmup and reports the average for
-the timed iterations. Do not remove this instrumentation during optimization.
+For focused analysis, include `selected_cycles.h` in the target kernel and
+temporarily place `start_select()` / `end_select()` around the region of
+interest. Remove those insertion points after analysis; the accumulator,
+reset, and benchmark reporting infrastructure should remain available.
 
 ## IDE configuration
 

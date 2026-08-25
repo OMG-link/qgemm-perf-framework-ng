@@ -1,5 +1,4 @@
 #include "ime1.h"
-#include "selected_cycles.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1734,13 +1733,7 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl(size_t BlkLen, const std::byte *
                                  "vadd.vi            v8, v8, -8                  \n\t"
                                  "vadd.vi            v9, v9, -8                  \n\t"
 
-                                 "rdcycle        s9                              \n\t"
-                                 "sub            %[cycles],  %[cycles],  s9      \n\t"
-
                                  SQ4BIT_KERNEL_COMP_4x16x16
-
-                                 "rdcycle        s9                              \n\t"
-                                 "add            %[cycles],  %[cycles],  s9      \n\t"
 
                                  "addi               t2, t2, -1                  \n\t"
                                  "bnez               t2, BLOCK_INNER_LOOP%=      \n\t"
@@ -1755,17 +1748,11 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl(size_t BlkLen, const std::byte *
                                  "bnez               t3, BLOCK_COUNTK_LOOP%=     \n\t"
                                  "RESULT_SAVE%=:                                 \n\t"
 
-                                 "rdcycle        s9                              \n\t"
-                                 "sub            %[cycles],  %[cycles],  s9      \n\t"
-
-                                 "rdcycle        s9                              \n\t"
-                                 "add            %[cycles],  %[cycles],  s9      \n\t"
-
                                  SAVE_RESULT_4x16
 
-                                 : [cycles] "+r"(selected_cycles)
+                                 :
                                  : [INNER] "r"(INNER), [A] "r"(QuantA), [B] "r"(QuantBDataPtr), [LDC] "r"(LDC), [BlockCountK] "r"(BlockCountK), [C] "r"(CPtr)
-                                 : "cc", "t0", "t1", "t2", "t3", "a1", "a2", "a3", "a4", "f1", "f2", "f3", "f4", "s1", "s2", "s3", "s4", "s5", "s6", "s9");
+                                 : "cc", "t0", "t1", "t2", "t3", "a1", "a2", "a3", "a4", "f1", "f2", "f3", "f4", "s1", "s2", "s3", "s4", "s5", "s6");
             }
         }
     }
