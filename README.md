@@ -47,9 +47,10 @@ provided for this project:
 ```bash
 ./compile-and-test.sh configure       # generates build/compile_commands.json
 ./compile-and-test.sh build
-./compile-and-test.sh test             # smoke test: M=12, N=32, K=32
-./compile-and-test.sh test 480 1536 1536
-./compile-and-test.sh run 480 1536 1536
+./compile-and-test.sh test             # verify and benchmark all kernels
+./compile-and-test.sh run --list
+./compile-and-test.sh run --kernel m4-batch-reduction --m 8 --n 16 --k 32
+./compile-and-test.sh run --kernel all --m 480 --n 1536 --k 1536 --samples 10
 ./compile-and-test.sh asm
 ./compile-and-test.sh clean
 ```
@@ -66,9 +67,46 @@ The active M4 dispatcher requires `M` to be divisible by 4. The benchmark's
 packed layout requires `N` to be divisible by 32 and `K` by 32. Invalid or
 non-positive dimensions are rejected before allocation.
 
-The benchmark currently fills already-quantized A and packed B buffers with a
-fixed byte pattern. It measures kernel performance but is not yet a numerical
-correctness test against a reference GEMM.
+## Per-kernel benchmark framework
+
+`ime-llama-bench` independently selects, verifies, and measures registered
+kernels. The initial registry contains:
+
+- `llama-dispatch`
+- `m4-batch-reduction`
+- `m8-batch-reduction`
+
+A registration contains only a stable ID, display name, standard llama.cpp
+quantization type, and lifecycle callbacks. Layouts, tile sizes, packing, and
+shape constraints remain private to each adapter. The framework creates one
+shared standard input for kernels with the same quantization type: F32
+activations plus row-major llama.cpp `block_q4_0` weights. Each adapter packs
+that input outside the timed region.
+
+Correctness is checked against the dependency-free local extracts in
+`bench/llama_reference/`, derived from llama.cpp commit `314e72934`. They
+implement standard Q4_0/Q8_0 quantization and the independent scalar dot
+product. No source or build path references the external llama.cpp checkout.
+SpacemiT-specific quantization rules are intentionally excluded; adapters use
+standard llama.cpp Q8_0 values and fp16-rounded scales before physical
+interleaving.
+
+Useful benchmark options:
+
+```text
+--list
+--kernel ID|all
+--m M --n N --k K
+--warmup N
+--samples N
+--iterations N       # omitted: calibrate automatically
+--no-verify
+```
+
+Total cycles are measured with Linux perf hardware counters. The existing
+`selected_cycles` instrumentation is reported separately when a kernel uses
+it. Results include minimum/median cycles, FMA per cycle, peak utilization,
+and an output checksum.
 
 `src/ime1_kernels.cpp` also contains an existing inline-assembly measurement around
 `SQ4BIT_KERNEL_COMP_4x16x16`. It accumulates directly into `selected_cycles`;

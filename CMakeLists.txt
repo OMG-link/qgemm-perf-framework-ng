@@ -27,15 +27,25 @@ add_executable(ime-llama-bench
     src/ime1_kernels.cpp
     src/selected_cycles.cpp
     bench/main.cpp
+    bench/framework/kernel_registry.cpp
+    bench/framework/benchmark.cpp
+    bench/llama_reference/llama_reference.cpp
+    bench/adapters/adapter_common.cpp
+    bench/adapters/llama_dispatch.cpp
+    bench/adapters/m4_batch_reduction.cpp
+    bench/adapters/m8_batch_reduction.cpp
 )
 target_include_directories(ime-llama-bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/adapters
 )
 target_link_libraries(ime-llama-bench PRIVATE ime_compile_options)
 target_compile_options(ime-llama-bench PRIVATE -Wall -Wextra)
 
 # Compile-check experimental kernels without linking them into the benchmark.
-add_library(ime-experiments OBJECT
+add_library(ime-experiments STATIC
     experiments/m4_batch_reduction.cpp
     experiments/m8_batch_reduction.cpp
 )
@@ -47,6 +57,7 @@ target_compile_options(ime-experiments PRIVATE
     -Wno-unused-variable
     -Wno-unused-but-set-variable
 )
+target_link_libraries(ime-llama-bench PRIVATE ime-experiments)
 
 set(IME_ASM_DIR ${CMAKE_CURRENT_BINARY_DIR}/asm)
 set(IME_ASM_OUTPUTS)
@@ -71,6 +82,9 @@ foreach(source IN ITEMS
             -O3
             -I${CMAKE_CURRENT_SOURCE_DIR}/include
             -I${CMAKE_CURRENT_SOURCE_DIR}/bench
+            -I${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
+            -I${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
+            -I${CMAKE_CURRENT_SOURCE_DIR}/bench/adapters
             -S ${CMAKE_CURRENT_SOURCE_DIR}/${source}
             -o ${output}
         DEPENDS

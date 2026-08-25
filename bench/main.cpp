@@ -1,166 +1,110 @@
-#include <cstdio>
 #include <cerrno>
-#include <climits>
+#include <cstdio>
 #include <cstdlib>
+#include <string_view>
 #include <vector>
 
-#include "ggml.h"
-#include "ime.h"
-#include "perf.h"
-#include "selected_cycles.h"
+#include "adapter_common.h"
+#include "benchmark.h"
 
-const int VL = 32;
+namespace {
 
-#define FREQ 1.6
-#define VLEN 256
-#define ELEM_WID 16
-
-using InBlock = block_q8_0x12;
-using KerBlock = block_q4_0x32;
-
-static bool parse_positive_int(const char *text, int &value) {
+bool parse_size(const char *text, size_t &value) {
     errno = 0;
     char *end = nullptr;
-    const long parsed = std::strtol(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || parsed <= 0 || parsed > INT_MAX) {
-        return false;
-    }
-    value = static_cast<int>(parsed);
+    const unsigned long long parsed = std::strtoull(text, &end, 10);
+    if (errno || end == text || *end || !parsed || parsed > SIZE_MAX) return false;
+    value = static_cast<size_t>(parsed);
     return true;
 }
 
+void usage(const char *program) {
+    std::printf("Usage: %s [--list] [--kernel ID|all] --m M --n N --k K "
+                "[--warmup N] [--samples N] [--iterations N] [--no-verify]\n", program);
+}
+
+} // namespace
+
 int main(int argc, char **argv) {
+    using namespace ime::bench;
+    adapters::register_llama_dispatch();
+    adapters::register_m4_batch_reduction();
+    adapters::register_m8_batch_reduction();
 
-    //  A [480][1536]
-    //  B [1536][1536]
-
-    // parse command line args M/N/K
-    if (argc != 4) {
-        printf("Usage: %s <M> <N> <K>\n", argv[0]);
-        return 1;
+    BenchmarkRequest request;
+    std::string_view selected = "all";
+    bool list = false;
+    for (int i = 1; i < argc; ++i) {
+        const std::string_view argument = argv[i];
+        if (argument == "--list") list = true;
+        else if (argument == "--no-verify") request.verify = false;
+        else if (argument == "--kernel" && i + 1 < argc) selected = argv[++i];
+        else if (argument == "--m" && i + 1 < argc && parse_size(argv[++i], request.m)) {}
+        else if (argument == "--n" && i + 1 < argc && parse_size(argv[++i], request.n)) {}
+        else if (argument == "--k" && i + 1 < argc && parse_size(argv[++i], request.k)) {}
+        else if (argument == "--warmup" && i + 1 < argc && parse_size(argv[++i], request.warmup_iterations)) {}
+        else if (argument == "--samples" && i + 1 < argc && parse_size(argv[++i], request.samples)) {}
+        else if (argument == "--iterations" && i + 1 < argc && parse_size(argv[++i], request.iterations)) {}
+        else {
+            usage(argv[0]);
+            return 2;
+        }
     }
-    int m = 0;
-    int n = 0;
-    int k = 0;
-    if (!parse_positive_int(argv[1], m) || !parse_positive_int(argv[2], n) || !parse_positive_int(argv[3], k)) {
-        std::fprintf(stderr, "M, N and K must be positive integers.\n");
+    if (list) {
+        for (const auto &kernel : registered_kernels()) {
+            std::printf("%-24.*s %.*s\n", static_cast<int>(kernel.id.size()), kernel.id.data(),
+                        static_cast<int>(kernel.name.size()), kernel.name.data());
+        }
+        return 0;
+    }
+    if (!request.m || !request.n || !request.k) {
+        usage(argv[0]);
+        return 2;
+    }
+    std::vector<const KernelRegistration *> kernels;
+    if (selected == "all") {
+        for (const auto &kernel : registered_kernels()) kernels.push_back(&kernel);
+    } else if (const auto *kernel = find_kernel(selected)) {
+        kernels.push_back(kernel);
+    } else {
+        std::fprintf(stderr, "unknown kernel: %.*s\n", static_cast<int>(selected.size()), selected.data());
         return 2;
     }
 
-    if (k % QK4_0 != 0 || m % 4 != 0 || n % VL != 0) {
-        std::fprintf(stderr, "Unsupported dimensions: M must be divisible by 4, N by %d, and K by %d.\n", VL, QK4_0);
-        return 2;
+    for (const auto *kernel : kernels) {
+        if (kernel->quantization != kernels.front()->quantization) {
+            std::fprintf(stderr, "selected kernels use different quantization types; run them separately\n");
+            return 2;
+        }
     }
-
-    constexpr size_t blk_len = 32;
-    constexpr size_t scale_stride = sizeof(uint16_t);
-    constexpr size_t blk_bitwidth = 4;
-
-    const size_t k_blks = ime_div_round_up(k, blk_len);
-
-    // ---- A / per_gemm_ws ----
-    const size_t lda = k_blks * ime_q8_block_size(blk_len);
-    std::vector<std::byte> per_gemm_ws(m * lda);
-    std::memset(per_gemm_ws.data(), 0x1, per_gemm_ws.size());
-
-    // ---- B (packed i4) ----
-    const size_t ldb = k_blks * (blk_len * blk_bitwidth / 8); // = k_blks * 16
-    const size_t packed_b_stride = ldb + k_blks * scale_stride;
-
-    std::vector<std::byte> packed_b(n * packed_b_stride);
-    std::memset(packed_b.data(), 0x1, packed_b.size());
-
-    // ---- C ----
-    const size_t ldc = n;
-    std::vector<float> c(m * ldc, 0.0f);
-
-    // ---- args ----
-    qnbitgemm_spacemit_ime_args args;
-    args.a_ptr = nullptr; // 不使用
-    args.lda = 0;         // 不使用
-    args.packed_quant_b_data = packed_b.data();
-    args.quant_b_scale = nullptr;
-    args.quant_b_zp = nullptr; // 不使用 zero-point
-    args.quant_b_blksum = nullptr;
-    args.bias = nullptr;
-    args.c_ptr = c.data();
-    args.ldc = ldc;
-
-    const double peak_fops = FREQ * VLEN / ELEM_WID;
-    const double operations = static_cast<double>(m) * n * k;
-    const int T = std::max(3, static_cast<int>((1e9 * peak_fops) / operations));
-
-    // Warmup
-    sqnbitgemm_spacemit_ime_i8i4(blk_len, k, &args, per_gemm_ws.data(),
-                                 /* m_start */ 0,
-                                 /* m_count */ m,
-                                 /* n_start */ 0,
-                                 /* n_count */ n);
-
-    reset_selected_cycles();
-
-    // Perf-setup
-    int fd_cycles = perf_event_cycles();
-    int fd_l1da = perf_event_l1d_access();
-    int fd_l1dm = perf_event_l1d_miss();
-    perf_reset(fd_cycles);
-    perf_reset(fd_l1da);
-    perf_reset(fd_l1dm);
-
-    // Main test
-    for (int t = 0; t < T; t++) {
-        sqnbitgemm_spacemit_ime_i8i4(blk_len, k, &args, per_gemm_ws.data(),
-                                     /* m_start */ 0,
-                                     /* m_count */ m,
-                                     /* n_start */ 0,
-                                     /* n_count */ n);
+    const auto input_owner = create_input(kernels.front()->quantization, request);
+    const auto input = input_owner.view();
+    bool failed = false;
+    for (const auto *kernel : kernels) {
+        const auto result = run_benchmark(*kernel, request, input);
+        std::printf("\n[%.*s] %.*s\n", static_cast<int>(kernel->id.size()), kernel->id.data(),
+                    static_cast<int>(kernel->name.size()), kernel->name.data());
+        if (result.skipped) {
+            std::printf("status: SKIP (%s)\n", result.message.c_str());
+            continue;
+        }
+        if (!result.message.empty()) {
+            std::printf("status: FAIL (%s), max_abs=%.6g, max_rel=%.6g\n", result.message.c_str(),
+                        result.max_absolute_error, result.max_relative_error);
+            failed = true;
+            continue;
+        }
+        std::printf("verify: %s, max_abs=%.6g, max_rel=%.6g\n",
+                    result.verified ? "PASS" : "disabled", result.max_absolute_error,
+                    result.max_relative_error);
+        std::printf("cycles: min=%llu median=%llu selected=%llu iterations=%zu samples=%zu\n",
+                    static_cast<unsigned long long>(result.min_cycles),
+                    static_cast<unsigned long long>(result.median_cycles),
+                    static_cast<unsigned long long>(result.selected_cycles), result.iterations,
+                    request.samples);
+        std::printf("performance: %.4f FMA/cycle, %.2f%% of 128 FMA/cycle\n",
+                    result.fma_per_cycle, result.utilization_percent);
+        std::printf("checksum: %.9g\n", result.checksum);
     }
-
-    // Perf-cleanup
-    perf_disable(fd_cycles);
-    perf_disable(fd_l1da);
-    perf_disable(fd_l1dm);
-    auto cycles = perf_read(fd_cycles);
-    auto l1d_access = perf_read(fd_l1da);
-    auto l1d_miss = perf_read(fd_l1dm);
-    perf_close_event(fd_cycles);
-    perf_close_event(fd_l1da);
-    perf_close_event(fd_l1dm);
-    const double miss_rate = l1d_access == 0 ? 0.0 : static_cast<double>(l1d_miss) / l1d_access * 100.0;
-    printf("cycle = %llu \t l1d_access = %llu \t l1d_miss = %llu \t miss_rate = %.2f%%\n",
-           static_cast<unsigned long long>(cycles), static_cast<unsigned long long>(l1d_access),
-           static_cast<unsigned long long>(l1d_miss), miss_rate);
-
-    int64_t cycle_total = cycles;
-    int64_t cycle_per_test = cycle_total / T;
-
-    int64_t selected_cycle_total = selected_cycles;
-    int64_t selected_cycle_per_test = selected_cycle_total / T;
-    printf("(selected) cycle_per_test: %ld, T: %d\n", selected_cycle_per_test, T);
-
-    int64_t n_fma = static_cast<int64_t>(k) * m * n;
-    int64_t fma_per_cycle;
-
-#ifdef SPACEMIT_X60
-    fma_per_cycle = 4 * 4 * 8;
-#else
-#ifdef XUANTIE_C910
-    fma_per_cycle = 16;
-#else
-#error "Unknown CPU. Cannot determine peak FMA"
-#endif
-#endif
-
-    int64_t theoretical_cycle = n_fma / fma_per_cycle;
-    int64_t actual_cycle = cycle_per_test;
-    double utilization = static_cast<double>(actual_cycle) / theoretical_cycle;
-
-    printf("乘加数: %ld\n", n_fma);
-    printf("理论需要周期数: %ld\n", theoretical_cycle);
-    printf("实际执行周期数: %ld\n", actual_cycle);
-    printf("实际-理论比值: %.2f (%.2f%%)\n", utilization, 100 / utilization);
-
-    // free(s);
-    // free(vx);
-    // free(vy);
+    return failed ? 1 : 0;
 }

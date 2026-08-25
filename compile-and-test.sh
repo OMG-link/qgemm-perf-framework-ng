@@ -39,12 +39,15 @@ usage() {
 Usage:
   $0 configure
   $0 build
-  $0 run  <M> <N> <K>
-  $0 test [M N K]
+  $0 run  [benchmark arguments]
+  $0 test [benchmark arguments]
   $0 asm
   $0 clean
 
 Environment overrides: TOOLCHAIN_DIR, CXX, DEPLOYMENT_SERVER, BUILD_DIR.
+Benchmark examples:
+  $0 run --list
+  $0 run --kernel all --m 480 --n 1536 --k 1536 --samples 10
 EOF
 }
 
@@ -58,16 +61,14 @@ case "${command}" in
         ;;
     run)
         shift
-        [[ $# -eq 3 ]] || { usage >&2; exit 2; }
         [[ -x "${BIN}" ]] || build
         run_remote "$@"
         ;;
     test)
         shift || true
-        [[ $# -eq 0 || $# -eq 3 ]] || { usage >&2; exit 2; }
         build
         if [[ $# -eq 0 ]]; then
-            run_remote 12 32 32
+            run_remote --kernel all --m 8 --n 16 --k 32 --samples 3 --iterations 10
         else
             run_remote "$@"
         fi
