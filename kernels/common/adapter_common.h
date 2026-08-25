@@ -28,6 +28,7 @@ void destroy_common(KernelState state) noexcept;
 
 void register_llama_dispatch();
 void register_m4_batch_reduction();
+void register_m4_immediate_reduction();
 void register_m8_batch_reduction();
 
 } // namespace ime::bench::adapters

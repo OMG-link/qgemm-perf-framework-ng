@@ -30,6 +30,8 @@ add_library(ime-kernels STATIC
     kernels/llama_dispatch/adapter.cpp
     kernels/m4_batch_reduction/kernel.cpp
     kernels/m4_batch_reduction/adapter.cpp
+    kernels/m4_immediate_reduction/kernel.cpp
+    kernels/m4_immediate_reduction/adapter.cpp
     kernels/m8_batch_reduction/kernel.cpp
     kernels/m8_batch_reduction/adapter.cpp
 )
@@ -43,6 +45,7 @@ target_compile_options(ime-kernels PRIVATE -Wall -Wextra)
 
 set_source_files_properties(
     kernels/m4_batch_reduction/kernel.cpp
+    kernels/m4_immediate_reduction/kernel.cpp
     kernels/m8_batch_reduction/kernel.cpp
     PROPERTIES COMPILE_OPTIONS
     "-Wno-unused-parameter;-Wno-unused-variable;-Wno-unused-but-set-variable"
@@ -102,6 +105,7 @@ endfunction()
 add_ime_assembly(kernels/llama_dispatch/wrapper.cpp llama_dispatch_wrapper)
 add_ime_assembly(kernels/llama_dispatch/ime1_kernels.cpp llama_dispatch_kernels)
 add_ime_assembly(kernels/m4_batch_reduction/kernel.cpp m4_batch_reduction)
+add_ime_assembly(kernels/m4_immediate_reduction/kernel.cpp m4_immediate_reduction)
 add_ime_assembly(kernels/m8_batch_reduction/kernel.cpp m8_batch_reduction)
 add_ime_assembly(kernels/common/selected_cycles.cpp selected_cycles)
 add_ime_assembly(bench/main.cpp main)

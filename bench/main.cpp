@@ -29,6 +29,7 @@ int main(int argc, char **argv) {
     using namespace ime::bench;
     adapters::register_llama_dispatch();
     adapters::register_m4_batch_reduction();
+    adapters::register_m4_immediate_reduction();
     adapters::register_m8_batch_reduction();
 
     BenchmarkRequest request;
