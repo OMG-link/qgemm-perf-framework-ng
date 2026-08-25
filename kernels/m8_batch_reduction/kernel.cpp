@@ -48,7 +48,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
             vint32m2_t inner_acc6 = __riscv_vmv_v_x_i32m2(0, 16);
             vint32m2_t inner_acc7 = __riscv_vmv_v_x_i32m2(0, 16);
 
-#pragma unroll
+#pragma clang loop unroll(disable)
             for (size_t inner = 0; inner < numKIter; ++inner) {
 
                 size_t vl8 = __riscv_vsetvlmax_e8m1();
