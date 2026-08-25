@@ -8,7 +8,7 @@
     ],
     "clang-format.executable": "/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-riscv/llvm/bin/clang-format",
     "clang-format.style": "file",
-    "editor.formatOnSave": false,
+    "editor.formatOnSave": true,
     "C_Cpp.intelliSenseEngine": "disabled",
     "cmake.generator": "Ninja",
     "cmake.buildDirectory": "${workspaceFolder}/build",
@@ -30,5 +30,6 @@
         "random": "cpp",
         "riscv_vector.h": "cpp",
         "smt_vector.h": "cpp"
-    }
+    },
+    "editor.formatOnSaveMode": "modifications"
 }
