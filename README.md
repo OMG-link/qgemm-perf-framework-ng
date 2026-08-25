@@ -12,17 +12,27 @@ ime-llama/
 │   ├── ime.h
 │   ├── ime1.h
 │   └── selected_cycles.h
-├── src/                      # Production wrapper, dispatcher, and kernels
-│   ├── ime.cpp
-│   ├── ime1_kernels.cpp
-│   └── selected_cycles.cpp
-├── bench/                    # Benchmark entry point and measurement helpers
+├── kernels/                  # Kernel implementation and adapter live together
+│   ├── common/
+│   │   ├── adapter_common.h
+│   │   ├── adapter_common.cpp
+│   │   └── selected_cycles.cpp
+│   ├── llama_dispatch/
+│   │   ├── wrapper.cpp
+│   │   ├── ime1_kernels.cpp
+│   │   └── adapter.cpp
+│   ├── m4_batch_reduction/
+│   │   ├── kernel.cpp
+│   │   └── adapter.cpp
+│   └── m8_batch_reduction/
+│       ├── kernel.cpp
+│       └── adapter.cpp
+├── bench/                    # Generic benchmark code only
 │   ├── main.cpp
 │   ├── perf.h
-│   └── timer.hpp
-├── experiments/              # Compile-checked, non-dispatched candidates
-│   ├── m4_batch_reduction.cpp
-│   └── m8_batch_reduction.cpp
+│   ├── timer.hpp
+│   ├── framework/
+│   └── llama_reference/
 ├── CMakeLists.txt
 ├── compile-and-test.sh
 └── README.md
@@ -30,9 +40,10 @@ ime-llama/
 
 `include/ggml.h` is the single source of truth for GGML quantization types,
 packed block layouts, fp16 conversion helpers, and common GGML macros.
-`include/ime1.h` is the shared IME1 kernel API used by both production and
-experimental kernels. `include/selected_cycles.h` provides the low-overhead
-selected-region cycle counter used during tuning.
+`include/ime1.h` is the shared IME1 kernel API. Each directory under `kernels/`
+owns both its implementation and benchmark adapter; kernels are not classified
+as production or experimental. `include/selected_cycles.h` provides the
+low-overhead selected-region cycle counter used during tuning.
 
 All generated binaries, objects, assembly, CMake files, and the compilation
 database live under the ignored `build/` directory.
@@ -108,7 +119,7 @@ Total cycles are measured with Linux perf hardware counters. The existing
 it. Results include minimum/median cycles, FMA per cycle, peak utilization,
 and an output checksum.
 
-`src/ime1_kernels.cpp` also contains an existing inline-assembly measurement around
+`kernels/llama_dispatch/ime1_kernels.cpp` also contains an existing inline-assembly measurement around
 `SQ4BIT_KERNEL_COMP_4x16x16`. It accumulates directly into `selected_cycles`;
 the benchmark resets the accumulator after warmup and reports the average for
 the timed iterations. Do not remove this instrumentation during optimization.
