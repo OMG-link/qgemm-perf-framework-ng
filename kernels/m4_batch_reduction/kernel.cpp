@@ -9,6 +9,7 @@ constexpr size_t kNr = 16;
 constexpr size_t kOutputM = kMr;
 constexpr size_t kOutputN = kNr;
 constexpr size_t kStepKPerIter = 16;
+constexpr size_t kBlockLength = QK8_0;
 constexpr size_t kBytesPerMIV = 32;
 constexpr size_t kBBytesPerKIter = kMr * kBytesPerMIV;
 constexpr size_t kABytesPerKIter = 2 * kBytesPerMIV;
@@ -17,14 +18,13 @@ constexpr size_t kRedBatchSize = 32;
 constexpr int kVmadotMode = 3;
 constexpr int kVmadotSignedness = 0;
 
-void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(size_t            BlkLen,
-                                                const uint8_t * GGML_RESTRICT baseA,
+void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(const uint8_t * GGML_RESTRICT baseA,
                                                 const uint8_t * GGML_RESTRICT baseW,
                                                 float *           GGML_RESTRICT baseC,
                                                 size_t            CountN,
                                                 size_t            BlockCountK,
                                                 const size_t      ldc) {
-    const size_t numKIter = BlkLen / kStepKPerIter;
+    const size_t numKIter = kBlockLength / kStepKPerIter;
 
     auto baseBlockA = (const block_q8_0x4_scale32 *)baseA;
     auto baseBlockW = (const block_q4_0x16 *)baseW;

@@ -21,16 +21,16 @@ size_t gemm_kernel_i8i4(size_t block_length, const std::byte *quant_a,
 void quant_a(const float *data, block_q8_0x4_scale32 *buffer, size_t count_m, size_t count_k);
 void quant_a_m8(const float *data, block_q8_0x8_scale32 *buffer, size_t count_m, size_t count_k);
 
-void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(size_t BlkLen, const uint8_t * GGML_RESTRICT QuantA, 
+void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t * GGML_RESTRICT QuantA,
     const uint8_t * GGML_RESTRICT QuantBData, float * GGML_RESTRICT C, size_t CountN, size_t BlockCountK, const size_t ldc);
 
-void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(size_t BlkLen, const uint8_t * GGML_RESTRICT QuantA, 
+void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(const uint8_t * GGML_RESTRICT QuantA,
     const uint8_t * GGML_RESTRICT QuantBData, float * GGML_RESTRICT C, size_t CountN, size_t BlockCountK, const size_t ldc);
 
 void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin(size_t BlkLen, const uint8_t * QuantA, 
     const uint8_t * QuantBData, float * C, size_t CountN, size_t BlockCountK, const size_t ldc);
 
-void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(size_t BlkLen, const uint8_t * QuantA, 
+void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t * QuantA,
     const uint8_t * QuantBData, float * C, size_t CountN, size_t BlockCountK, const size_t ldc);
     
 void forward_mul_mat(void *w_data, const float *feature, float *output, const int64_t gemm_m, 

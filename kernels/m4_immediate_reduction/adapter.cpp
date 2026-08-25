@@ -11,7 +11,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
         for (size_t tile_m = 0; tile_m < state.m; tile_m += 4) {
             const auto *a = reinterpret_cast<const uint8_t *>(state.packed_a_m4.data() + (tile_m / 4) * state.blocks_k * m4_block_size);
-            SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(QK8_0, a, reinterpret_cast<const uint8_t *>(state.packed_b.data()), state.output.data() + tile_m * state.n, state.n, state.blocks_k,
+            SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(a, reinterpret_cast<const uint8_t *>(state.packed_b.data()), state.output.data() + tile_m * state.n, state.n, state.blocks_k,
                                                               state.n);
         }
     }

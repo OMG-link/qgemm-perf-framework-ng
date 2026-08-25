@@ -13,7 +13,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
             const auto *a = reinterpret_cast<const uint8_t *>(
                 state.packed_a_m4.data() + (tile_m / 4) * state.blocks_k * m4_block_size);
             SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(
-                QK8_0, a, reinterpret_cast<const uint8_t *>(state.packed_b.data()),
+                a, reinterpret_cast<const uint8_t *>(state.packed_b.data()),
                 state.output.data() + tile_m * state.n, state.n, state.blocks_k, state.n);
         }
     }

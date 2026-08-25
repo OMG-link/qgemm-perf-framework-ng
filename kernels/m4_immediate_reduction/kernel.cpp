@@ -4,10 +4,12 @@
 
 #include "ime1.h"
 
-void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(size_t BlkLen, const uint8_t *GGML_RESTRICT QuantA, const uint8_t *GGML_RESTRICT QuantBData, float *GGML_RESTRICT C, size_t CountN,
+constexpr size_t kBlockLength = QK8_0;
+
+void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTRICT QuantA, const uint8_t *GGML_RESTRICT QuantBData, float *GGML_RESTRICT C, size_t CountN,
                                                        size_t BlockCountK, const size_t ldc) {
 
-    const size_t INNER = BlkLen / 16;
+    const size_t INNER = kBlockLength / 16;
 
     auto A = (const block_q8_0x4_scale32 *)QuantA;
     auto B = (const block_q4_0x16 *)QuantBData;
