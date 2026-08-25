@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "SpacemiT X60 IME",
+            "compilerPath": "/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-riscv/llvm/bin/clang++",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "includePath": [
+                "${workspaceFolder}/**"
+            ],
+            "defines": [
+                "SPACEMIT_X60"
+            ],
+            "cStandard": "c17",
+            "cppStandard": "c++20",
+            "intelliSenseMode": "linux-clang-x64",
+            "compilerArgs": [
+                "-march=rv64gcv_zvfh_zicbop_zba_xsmtvdot",
+                "-mtune=spacemit-x60"
+            ]
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,34 @@
+{
+    "clangd.path": "/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-riscv/llvm/bin/clangd",
+    "clangd.arguments": [
+        "--compile-commands-dir=${workspaceFolder}/build",
+        "--query-driver=/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-riscv/llvm/bin/clang*",
+        "--background-index",
+        "--clang-tidy"
+    ],
+    "clang-format.executable": "/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-riscv/llvm/bin/clang-format",
+    "clang-format.style": "file",
+    "editor.formatOnSave": false,
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "cmake.generator": "Ninja",
+    "cmake.buildDirectory": "${workspaceFolder}/build",
+    "cmake.configureOnOpen": true,
+    "cmake.configureSettings": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-riscv/llvm/bin/clang++",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+    },
+    "files.associations": {
+        "algorithm": "cpp",
+        "chrono": "cpp",
+        "compare": "cpp",
+        "cstddef": "cpp",
+        "cstdint": "cpp",
+        "cstdio": "cpp",
+        "cstring": "cpp",
+        "format": "cpp",
+        "random": "cpp",
+        "riscv_vector.h": "cpp",
+        "smt_vector.h": "cpp"
+    }
+}
