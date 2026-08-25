@@ -119,6 +119,9 @@ Total cycles are measured with Linux perf hardware counters. The existing
 it. Results include minimum/median cycles, FMA per cycle, peak utilization,
 and an output checksum.
 
+The current large-shape performance baseline is recorded in
+[`docs/baseline-2026-08-25.md`](docs/baseline-2026-08-25.md).
+
 `kernels/llama_dispatch/ime1_kernels.cpp` also contains an existing inline-assembly measurement around
 `SQ4BIT_KERNEL_COMP_4x16x16`. It accumulates directly into `selected_cycles`;
 the benchmark resets the accumulator after warmup and reports the average for
