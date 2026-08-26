@@ -174,10 +174,17 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
             if (reductionCount == kRedBatchSize or bk == BlockCountK) {
                 const size_t reductionBlockStart = bk - reductionCount;
                 auto reduce_4x16 = [&](const float *components, float *accumulator, size_t aScaleOffset) {
-                    vfloat32m8_t acc_r = __riscv_vle32_v_f32m8(accumulator, vl(32, 8));
+                    vfloat32m2_t acc_0 = __riscv_vle32_v_f32m2(accumulator + 0 * kOutputN, vl(32, 2));
+                    vfloat32m2_t acc_1 = __riscv_vle32_v_f32m2(accumulator + 1 * kOutputN, vl(32, 2));
+                    vfloat32m2_t acc_2 = __riscv_vle32_v_f32m2(accumulator + 2 * kOutputN, vl(32, 2));
+                    vfloat32m2_t acc_3 = __riscv_vle32_v_f32m2(accumulator + 3 * kOutputN, vl(32, 2));
                     for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
                         const size_t reductionBlock = reductionBlockStart + reductionIndex;
-                        vfloat32m8_t component = __riscv_vle32_v_f32m8(components + reductionIndex * 4 * kOutputN, vl(32, 8));
+                        const float *component = components + reductionIndex * 4 * kOutputN;
+                        vfloat32m2_t component_0 = __riscv_vle32_v_f32m2(component + 0 * kOutputN, vl(32, 2));
+                        vfloat32m2_t component_1 = __riscv_vle32_v_f32m2(component + 1 * kOutputN, vl(32, 2));
+                        vfloat32m2_t component_2 = __riscv_vle32_v_f32m2(component + 2 * kOutputN, vl(32, 2));
+                        vfloat32m2_t component_3 = __riscv_vle32_v_f32m2(component + 3 * kOutputN, vl(32, 2));
                         vfloat16m1_t bsh = __riscv_vle16_v_f16m1(
                             (_Float16 *)rowBlockW[reductionBlock].d, vl(16, 1));
                         float as0 = baseBlockA[reductionBlock].d[aScaleOffset + 0];
@@ -190,13 +197,15 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
                         vfloat32m2_t abscale_1 = __riscv_vfmul_vf_f32m2(bs, as1, vl(32, 2));
                         vfloat32m2_t abscale_2 = __riscv_vfmul_vf_f32m2(bs, as2, vl(32, 2));
                         vfloat32m2_t abscale_3 = __riscv_vfmul_vf_f32m2(bs, as3, vl(32, 2));
-                        vfloat32m2_t acc_0 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc_r, 0), __riscv_vget_v_f32m8_f32m2(component, 0), abscale_0, vl(32, 2));
-                        vfloat32m2_t acc_1 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc_r, 1), __riscv_vget_v_f32m8_f32m2(component, 1), abscale_1, vl(32, 2));
-                        vfloat32m2_t acc_2 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc_r, 2), __riscv_vget_v_f32m8_f32m2(component, 2), abscale_2, vl(32, 2));
-                        vfloat32m2_t acc_3 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc_r, 3), __riscv_vget_v_f32m8_f32m2(component, 3), abscale_3, vl(32, 2));
-                        acc_r = __riscv_vcreate_v_f32m2_f32m8(acc_0, acc_1, acc_2, acc_3);
+                        acc_0 = __riscv_vfmacc_vv_f32m2(acc_0, component_0, abscale_0, vl(32, 2));
+                        acc_1 = __riscv_vfmacc_vv_f32m2(acc_1, component_1, abscale_1, vl(32, 2));
+                        acc_2 = __riscv_vfmacc_vv_f32m2(acc_2, component_2, abscale_2, vl(32, 2));
+                        acc_3 = __riscv_vfmacc_vv_f32m2(acc_3, component_3, abscale_3, vl(32, 2));
                     }
-                    __riscv_vse32_v_f32m8(accumulator, acc_r, vl(32, 8));
+                    __riscv_vse32_v_f32m2(accumulator + 0 * kOutputN, acc_0, vl(32, 2));
+                    __riscv_vse32_v_f32m2(accumulator + 1 * kOutputN, acc_1, vl(32, 2));
+                    __riscv_vse32_v_f32m2(accumulator + 2 * kOutputN, acc_2, vl(32, 2));
+                    __riscv_vse32_v_f32m2(accumulator + 3 * kOutputN, acc_3, vl(32, 2));
                 };
                 reduce_4x16(reduction_component_0, acc, 0);
                 reduce_4x16(reduction_component_1, acc + 4 * kOutputN, 4);
