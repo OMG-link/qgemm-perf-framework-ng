@@ -23,7 +23,6 @@ struct BenchmarkResult {
     std::string message;
     uint64_t min_cycles = 0;
     uint64_t median_cycles = 0;
-    uint64_t selected_cycles = 0;
     size_t iterations = 0;
     double checksum = 0.0;
     double fma_per_cycle = 0.0;

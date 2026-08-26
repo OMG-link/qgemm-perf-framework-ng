@@ -98,11 +98,8 @@ int main(int argc, char **argv) {
         std::printf("verify: %s, max_abs=%.6g, max_rel=%.6g\n",
                     result.verified ? "PASS" : "disabled", result.max_absolute_error,
                     result.max_relative_error);
-        std::printf("cycles: min=%llu median=%llu selected=%llu iterations=%zu samples=%zu\n",
-                    static_cast<unsigned long long>(result.min_cycles),
-                    static_cast<unsigned long long>(result.median_cycles),
-                    static_cast<unsigned long long>(result.selected_cycles), result.iterations,
-                    request.samples);
+        std::printf("cycles: min=%llu median=%llu iterations=%zu samples=%zu\n", static_cast<unsigned long long>(result.min_cycles), static_cast<unsigned long long>(result.median_cycles),
+                    result.iterations, request.samples);
         std::printf("performance: %.4f FMA/cycle, %.2f%% of 128 FMA/cycle\n",
                     result.fma_per_cycle, result.utilization_percent);
         std::printf("checksum: %.9g\n", result.checksum);

@@ -6,7 +6,6 @@
 
 #include "llama_reference.h"
 #include "perf.h"
-#include "selected_cycles.h"
 
 namespace ime::bench {
 
@@ -94,10 +93,8 @@ BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkR
     }
     result.iterations = iterations;
     std::vector<uint64_t> samples;
-    std::vector<uint64_t> selected_samples;
     for (size_t sample = 0; sample < request.samples; ++sample) {
         kernel.callbacks.reset(prepared.state);
-        reset_selected_cycles();
         asm volatile("" ::: "memory");
         perf_reset(cycles_fd);
         kernel.callbacks.run(prepared.state, iterations);
@@ -105,14 +102,11 @@ BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkR
         const uint64_t elapsed = perf_read(cycles_fd);
         asm volatile("" ::: "memory");
         samples.push_back(elapsed / iterations);
-        selected_samples.push_back(static_cast<uint64_t>(selected_cycles) / iterations);
     }
     perf_close_event(cycles_fd);
     std::sort(samples.begin(), samples.end());
-    std::sort(selected_samples.begin(), selected_samples.end());
     result.min_cycles = samples.front();
     result.median_cycles = samples[samples.size() / 2];
-    result.selected_cycles = selected_samples[selected_samples.size() / 2];
     result.checksum = kernel.callbacks.checksum(prepared.state);
     const double fma = static_cast<double>(request.m) * request.n * request.k;
     result.fma_per_cycle = fma / result.median_cycles;

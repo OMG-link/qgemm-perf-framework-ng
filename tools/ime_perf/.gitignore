@@ -1,0 +1,4 @@
+# Local profiler configuration and runtime artifacts.
+perf-regions.json
+.artifacts/
+__pycache__/

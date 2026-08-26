@@ -23,7 +23,6 @@ target_include_directories(ime_compile_options INTERFACE
 )
 
 add_library(ime-kernels STATIC
-    kernels/common/selected_cycles.cpp
     kernels/common/adapter_common.cpp
     kernels/llama_dispatch/wrapper.cpp
     kernels/llama_dispatch/ime1_kernels.cpp
@@ -93,7 +92,6 @@ function(add_ime_assembly source stem)
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ggml.h
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ime.h
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ime1.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/selected_cycles.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/perf.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/timer.hpp
         VERBATIM
@@ -107,7 +105,6 @@ add_ime_assembly(kernels/llama_dispatch/ime1_kernels.cpp llama_dispatch_kernels)
 add_ime_assembly(kernels/m4_batch_reduction/kernel.cpp m4_batch_reduction)
 add_ime_assembly(kernels/m4_immediate_reduction/kernel.cpp m4_immediate_reduction)
 add_ime_assembly(kernels/m8_batch_reduction/kernel.cpp m8_batch_reduction)
-add_ime_assembly(kernels/common/selected_cycles.cpp selected_cycles)
 add_ime_assembly(bench/main.cpp main)
 
 add_custom_target(assembly DEPENDS ${IME_ASM_OUTPUTS})

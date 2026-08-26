@@ -10,13 +10,11 @@ ime-llama/
 ├── include/                  # Shared types and public kernel interfaces
 │   ├── ggml.h
 │   ├── ime.h
-│   ├── ime1.h
-│   └── selected_cycles.h
+│   └── ime1.h
 ├── kernels/                  # Kernel implementation and adapter live together
 │   ├── common/
 │   │   ├── adapter_common.h
-│   │   ├── adapter_common.cpp
-│   │   └── selected_cycles.cpp
+│   │   └── adapter_common.cpp
 │   ├── llama_dispatch/
 │   │   ├── wrapper.cpp
 │   │   ├── ime1_kernels.cpp
@@ -33,6 +31,10 @@ ime-llama/
 │   ├── timer.hpp
 │   ├── framework/
 │   └── llama_reference/
+├── tools/                    # No-instrumentation profiling automation
+│   └── ime_perf/
+│       ├── ime_perf.py
+│       └── perf-regions.json
 ├── CMakeLists.txt
 ├── compile-and-test.sh
 └── README.md
@@ -42,8 +44,7 @@ ime-llama/
 packed block layouts, fp16 conversion helpers, and common GGML macros.
 `include/ime1.h` is the shared IME1 kernel API. Each directory under `kernels/`
 owns both its implementation and benchmark adapter; kernels are not classified
-as production or experimental. `include/selected_cycles.h` provides the
-low-overhead selected-region cycle counter used during tuning.
+as production or experimental.
 
 All generated binaries, objects, assembly, CMake files, and the compilation
 database live under the ignored `build/` directory.
@@ -114,19 +115,39 @@ Useful benchmark options:
 --no-verify
 ```
 
-Total cycles are measured with Linux perf hardware counters. The existing
-`selected_cycles` tools remain available for temporary hot-region analysis and
-are reported separately when a kernel uses them. No kernel is permanently
-instrumented by default. Results include minimum/median cycles, FMA per cycle,
-peak utilization, and an output checksum.
+Total cycles are measured with Linux perf hardware counters. No kernel is
+instrumented by the benchmark by default. Results include minimum/median cycles,
+FMA per cycle, peak utilization, and an output checksum.
 
 The current large-shape performance baseline is recorded in
 [`docs/baseline-2026-08-25.md`](docs/baseline-2026-08-25.md).
 
-For focused analysis, include `selected_cycles.h` in the target kernel and
-temporarily place `start_select()` / `end_select()` around the region of
-interest. Remove those insertion points after analysis; the accumulator,
-reset, and benchmark reporting infrastructure should remain available.
+## No-instrumentation hotspot profiling
+
+Use `tools/ime_perf/ime_perf.py` to run repeatable remote `perf` PC sampling without
+adding measurement code to a kernel:
+
+```bash
+python3 tools/ime_perf/ime_perf.py preflight --remote spacemit-k1 --cpu 0
+python3 tools/ime_perf/ime_perf.py profile \
+  --remote spacemit-k1 --cpu 0 \
+  --kernel m8-batch-reduction --m 480 --n 1536 --k 1536 \
+  --warmup 2 --samples 1 --iterations 20 --repetitions 3 \
+  --event cpu-clock:u --period 10000
+```
+
+The tool preserves each `perf.data`, the exact benchmark binary, remote
+environment, symbol/annotation reports, and a machine-readable summary under
+`tools/ime_perf/.artifacts/` (which is ignored by git). Region mappings are maintained in
+`tools/ime_perf/perf-regions.json`, which is local configuration and is also
+ignored by git. Each kernel entry must bind regions to the exact annotated DSO
+and demangled symbol; an address alone is not sufficient because different ELF
+images can reuse the same relative address. Address ranges are tied to the
+exact binary and must be refreshed whenever code generation changes. The
+parser reports diagnostics when the selected section is missing or configured
+percentages exceed a valid local-period total. See
+[`docs/2026-08-26-cpu-clock-pc-profile.md`](docs/2026-08-26-cpu-clock-pc-profile.md)
+for the method, caveats, and current m8 results.
 
 ## IDE configuration
 
