@@ -191,7 +191,13 @@ def make_remote_script(
     record_options = ["perf", "record", "-q", "-e", event, "-c", str(period)]
     if call_graph != "none":
         record_options += ["--call-graph", call_graph]
-    record_options += ["-o", f"{remote_dir}/perf.data", "--", "taskset", "-c", str(cpu), f"{remote_dir}/ime-llama-bench"]
+    # Keep the profiled process layout deterministic without changing the
+    # remote system-wide ASLR setting.  This also matches standalone runs that
+    # are launched with `setarch -R` when address-layout reproducibility matters.
+    record_options += [
+        "-o", f"{remote_dir}/perf.data", "--", "setarch", "-R",
+        "taskset", "-c", str(cpu), f"{remote_dir}/ime-llama-bench",
+    ]
     record_options += binary_args
     record_command = " ".join(q(item) for item in record_options)
     report_command = (
@@ -215,6 +221,10 @@ remote_dir={q(remote_dir)}
     perf --version 2>&1
     echo 'perf_event_paranoid:'
     cat /proc/sys/kernel/perf_event_paranoid 2>&1 || true
+    echo 'randomize_va_space:'
+    cat /proc/sys/kernel/randomize_va_space 2>&1 || true
+    echo 'profile_execution:'
+    echo 'setarch -R taskset -c {cpu} ime-llama-bench'
     echo 'cpu_governor:'
     cat /sys/devices/system/cpu/cpu{cpu}/cpufreq/scaling_governor 2>&1 || true
     echo 'cpu_min_freq:'
