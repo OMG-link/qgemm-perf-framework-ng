@@ -102,12 +102,17 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
                 inner_acc6 = __riscv_smt_vmadot_i32m2(inner_acc6, A2, bHi3i, kVmadotMode, kVmadotSignedness);
                 inner_acc7 = __riscv_smt_vmadot_i32m2(inner_acc7, A2, bHi4i, kVmadotMode, kVmadotSignedness);
             }
-            size_t vl_m8 = __riscv_vsetvlmax_e32m8();
-
-            vint32m8_t acc_m8_0 = __riscv_vcreate_v_i32m2_i32m8(inner_acc0, inner_acc1, inner_acc2, inner_acc3);
-            vint32m8_t acc_m8_1 = __riscv_vcreate_v_i32m2_i32m8(inner_acc4, inner_acc5, inner_acc6, inner_acc7);
-            vfloat32m8_t acc_f_m8_0 = __riscv_vfcvt_f_x_v_f32m8(acc_m8_0, vl_m8);
-            vfloat32m8_t acc_f_m8_1 = __riscv_vfcvt_f_x_v_f32m8(acc_m8_1, vl_m8);
+            const size_t vl_m2 = __riscv_vsetvlmax_e32m2();
+            vfloat32m2_t result_0 = __riscv_vfcvt_f_x_v_f32m2(inner_acc0, vl_m2);
+            vfloat32m2_t result_1 = __riscv_vfcvt_f_x_v_f32m2(inner_acc1, vl_m2);
+            vfloat32m2_t result_2 = __riscv_vfcvt_f_x_v_f32m2(inner_acc2, vl_m2);
+            vfloat32m2_t result_3 = __riscv_vfcvt_f_x_v_f32m2(inner_acc3, vl_m2);
+            vfloat32m2_t result_4 = __riscv_vfcvt_f_x_v_f32m2(inner_acc4, vl_m2);
+            vfloat32m2_t result_5 = __riscv_vfcvt_f_x_v_f32m2(inner_acc5, vl_m2);
+            vfloat32m2_t result_6 = __riscv_vfcvt_f_x_v_f32m2(inner_acc6, vl_m2);
+            vfloat32m2_t result_7 = __riscv_vfcvt_f_x_v_f32m2(inner_acc7, vl_m2);
+            vfloat32m8_t acc_f_m8_0 = __riscv_vcreate_v_f32m2_f32m8(result_0, result_1, result_2, result_3);
+            vfloat32m8_t acc_f_m8_1 = __riscv_vcreate_v_f32m2_f32m8(result_4, result_5, result_6, result_7);
             auto store_unpack = [](const vfloat32m8_t facc, float *C_start) {
                 const size_t vl_m8 = __riscv_vsetvlmax_e32m8();
                 float *a1 = C_start;
