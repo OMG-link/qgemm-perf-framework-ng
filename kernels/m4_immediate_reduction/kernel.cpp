@@ -51,6 +51,7 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTR
             A_scale_23 = __riscv_vfmv_v_f_f32m1_tu(A_scale_23, a_scale2, 4);
             vfloat32m2_t A_scale = __riscv_vcreate_v_f32m1_f32m2(A_scale_01, A_scale_23);
 
+            #pragma clang loop unroll(disable)
             for (size_t inner = 0; inner < INNER; ++inner) {
 
                 size_t vl8 = __riscv_vsetvlmax_e8m1();
