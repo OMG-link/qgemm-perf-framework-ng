@@ -20,16 +20,14 @@ constexpr size_t kRedBatchSize = 8;
 constexpr int kVmadotMode = 3;
 constexpr int kVmadotSignedness = 0;
 
-void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *GGML_RESTRICT baseA, const uint8_t *GGML_RESTRICT baseW, float *GGML_RESTRICT baseC, size_t CountN,
+void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *GGML_RESTRICT baseA, const uint8_t *GGML_RESTRICT baseWQs,
+                                                                const uint16_t *GGML_RESTRICT baseWScales, float *GGML_RESTRICT baseC, size_t CountN,
                                                                 size_t BlockCountK, const size_t ldc) {
 
     const size_t numKIter = kBlockLength / kStepKPerIter;
 
     auto baseBlockA = (const block_q8_0x8_scale32 *)baseA;
-    auto baseBlockW = (const block_q4_0x16 *)baseW;
-
     for (size_t n = 0; n < CountN; n += kOutputN) {
-        auto rowBlockW = &baseBlockW[n / kOutputN * BlockCountK];
         float *rowC = baseC + n;
 
         float acc[kOutputM * kOutputN] = {};
@@ -37,7 +35,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
         float reduction_component_1[4 * kOutputN * kRedBatchSize];
         size_t reductionCount = 0;
         for (size_t bk = 0; bk < BlockCountK;) {
-            auto &blockW = rowBlockW[bk];
+            const size_t blockWIndex = (n / kOutputN) * BlockCountK + bk;
 
             vint32m2_t inner_acc0 = __riscv_vmv_v_x_i32m2(0, 16);
             vint32m2_t inner_acc1 = __riscv_vmv_v_x_i32m2(0, 16);
@@ -52,10 +50,11 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
             for (size_t inner = 0; inner < numKIter; ++inner) {
 
                 size_t vl8 = __riscv_vsetvlmax_e8m1();
-                vuint8m1_t bPacked1 = __riscv_vle8_v_u8m1((const uint8_t *)&blockW.qs[inner * kBBytesPerKIter + 0 * kBytesPerMIV], vl8);
-                vuint8m1_t bPacked2 = __riscv_vle8_v_u8m1((const uint8_t *)&blockW.qs[inner * kBBytesPerKIter + 1 * kBytesPerMIV], vl8);
-                vuint8m1_t bPacked3 = __riscv_vle8_v_u8m1((const uint8_t *)&blockW.qs[inner * kBBytesPerKIter + 2 * kBytesPerMIV], vl8);
-                vuint8m1_t bPacked4 = __riscv_vle8_v_u8m1((const uint8_t *)&blockW.qs[inner * kBBytesPerKIter + 3 * kBytesPerMIV], vl8);
+                const uint8_t *blockWQs = baseWQs + blockWIndex * 16 * (QK4_0 / 2);
+                vuint8m1_t bPacked1 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 0 * kBytesPerMIV, vl8);
+                vuint8m1_t bPacked2 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 1 * kBytesPerMIV, vl8);
+                vuint8m1_t bPacked3 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 2 * kBytesPerMIV, vl8);
+                vuint8m1_t bPacked4 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 3 * kBytesPerMIV, vl8);
 
                 vuint8m1_t bLo1 = __riscv_vand_vx_u8m1(bPacked1, 15, vl8);
                 vuint8m1_t bLo2 = __riscv_vand_vx_u8m1(bPacked2, 15, vl8);
@@ -191,7 +190,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
                         vfloat32m2_t component_2 = __riscv_vle32_v_f32m2(component + 2 * kOutputN, vl(32, 2));
                         vfloat32m2_t component_3 = __riscv_vle32_v_f32m2(component + 3 * kOutputN, vl(32, 2));
                         vfloat16m1_t bsh = __riscv_vle16_v_f16m1(
-                            (_Float16 *)rowBlockW[reductionBlock].d, vl(16, 1));
+                            (_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * 16 + reductionBlock * 16), vl(16, 1));
                         float as0 = baseBlockA[reductionBlock].d[aScaleOffset + 0];
                         float as1 = baseBlockA[reductionBlock].d[aScaleOffset + 1];
                         float as2 = baseBlockA[reductionBlock].d[aScaleOffset + 2];

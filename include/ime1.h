@@ -31,7 +31,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin(size_t BlkLen, const uint
     const uint8_t * QuantBData, float * C, size_t CountN, size_t BlockCountK, const size_t ldc);
 
 void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t * QuantA,
-    const uint8_t * QuantBData, float * C, size_t CountN, size_t BlockCountK, const size_t ldc);
+    const uint8_t * QuantBQs, const uint16_t * QuantBScales, float * C, size_t CountN, size_t BlockCountK, const size_t ldc);
     
 void forward_mul_mat(void *w_data, const float *feature, float *output, const int64_t gemm_m, 
     const int64_t gemm_n, const int64_t gemm_k);

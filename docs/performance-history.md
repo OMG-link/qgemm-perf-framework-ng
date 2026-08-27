@@ -14,3 +14,4 @@ Release build with a fixed 256-bit vector length, and are pinned to CPU 0 on
 | 2026-08-25 | `m8-batch-reduction` | Disable inner-loop unrolling | 5.96% |
 | 2026-08-26 | `m8-batch-reduction` | Use four loose M2 reduction accumulators | 6.14% |
 | 2026-08-27 | `m8-batch-reduction` | Convert eight M2 accumulators before rebuilding two M8 results | 6.24% |
+| 2026-08-27 | `m8-batch-reduction` | Use SoA weight planes for M8 batch reduction | 6.45% |

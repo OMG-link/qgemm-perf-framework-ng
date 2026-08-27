@@ -10,6 +10,8 @@ namespace {
 
 struct M8State : CommonState {
     std::vector<block_q8_0x8_scale32> packed_a_m8;
+    std::vector<uint8_t> packed_b_qs;
+    std::vector<uint16_t> packed_b_scales;
 };
 
 PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &input) {
@@ -19,6 +21,8 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
     auto state = std::make_unique<M8State>();
     static_cast<CommonState &>(*state) = std::move(*common);
     state->packed_a_m8.resize((state->m / 8) * state->blocks_k);
+    state->packed_b_qs.resize((state->n / 16) * state->blocks_k * 16 * (QK4_0 / 2));
+    state->packed_b_scales.resize((state->n / 16) * state->blocks_k * 16);
     constexpr size_t m4_block_size = 4 * (sizeof(float) + QK8_0);
     for (size_t tile_m = 0; tile_m < state->m; tile_m += 8) {
         for (size_t block = 0; block < state->blocks_k; ++block) {
@@ -29,6 +33,15 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
             std::memcpy(destination.d + 4, high, 4 * sizeof(float));
             std::memcpy(destination.qs, low + 4 * sizeof(float), 4 * QK8_0);
             std::memcpy(destination.qs + 4 * QK8_0, high + 4 * sizeof(float), 4 * QK8_0);
+        }
+    }
+    for (size_t tile_n = 0; tile_n < state->n; tile_n += 16) {
+        for (size_t block = 0; block < state->blocks_k; ++block) {
+            const auto &source = state->packed_b[(tile_n / 16) * state->blocks_k + block];
+            const size_t index = (tile_n / 16) * state->blocks_k + block;
+            std::memcpy(state->packed_b_qs.data() + index * 16 * (QK4_0 / 2), source.qs,
+                        16 * (QK4_0 / 2));
+            std::memcpy(state->packed_b_scales.data() + index * 16, source.d, 16 * sizeof(uint16_t));
         }
     }
     state->packed_a_m4.clear();
@@ -42,7 +55,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
             const auto *a = reinterpret_cast<const uint8_t *>(
                 state.packed_a_m8.data() + (tile_m / 8) * state.blocks_k);
             SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(
-                a, reinterpret_cast<const uint8_t *>(state.packed_b.data()),
+                a, state.packed_b_qs.data(), state.packed_b_scales.data(),
                 state.output.data() + tile_m * state.n, state.n, state.blocks_k, state.n);
         }
     }
