@@ -16,3 +16,4 @@ Release build with a fixed 256-bit vector length, and are pinned to CPU 0 on
 | 2026-08-27 | `m8-batch-reduction` | Convert eight M2 accumulators before rebuilding two M8 results | 6.24% |
 | 2026-08-27 | `m8-batch-reduction` | Use SoA weight planes for M8 batch reduction | 6.45% |
 | 2026-08-27 | `m8-batch-reduction` | 调整指令排布（通过添加 barrier 以及延后 fcvt） | 6.71% |
+| 2026-08-28 | `m8-batch-reduction` | Expand component writeback and batch reduction to 8x16; reduce four rows per spill-free group | 6.99% |

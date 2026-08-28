@@ -5,6 +5,16 @@
 
 #include "ime1.h"
 
+#define REPEAT_8(operation, ...)                                                                                         \
+    operation(0, __VA_ARGS__)                                                                                           \
+    operation(1, __VA_ARGS__)                                                                                           \
+    operation(2, __VA_ARGS__)                                                                                           \
+    operation(3, __VA_ARGS__)                                                                                           \
+    operation(4, __VA_ARGS__)                                                                                           \
+    operation(5, __VA_ARGS__)                                                                                           \
+    operation(6, __VA_ARGS__)                                                                                           \
+    operation(7, __VA_ARGS__)
+
 constexpr size_t kMr = 8;
 constexpr size_t kNr = 16;
 constexpr size_t kOutputM = kMr;
@@ -31,8 +41,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
         float *rowC = baseC + n;
 
         float acc[kOutputM * kOutputN] = {};
-        int32_t reduction_component_0[4 * kOutputN * kRedBatchSize];
-        int32_t reduction_component_1[4 * kOutputN * kRedBatchSize];
+        int32_t reduction_components[kOutputM * kOutputN * kRedBatchSize];
         size_t reductionCount = 0;
         for (size_t bk = 0; bk < BlockCountK;) {
             const size_t blockWIndex = (n / kOutputN) * BlockCountK + bk;
@@ -103,118 +112,90 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
                 inner_acc6 = __riscv_smt_vmadot_i32m2(inner_acc6, A4, bHi3i, kVmadotMode, kVmadotSignedness);
                 inner_acc7 = __riscv_smt_vmadot_i32m2(inner_acc7, A4, bHi4i, kVmadotMode, kVmadotSignedness);
             }
-            const size_t vl_m2 = __riscv_vsetvlmax_e32m2();
-            vint32m8_t acc_m8_0 = __riscv_vcreate_v_i32m2_i32m8(inner_acc0, inner_acc1, inner_acc2, inner_acc3);
-            vint32m8_t acc_m8_1 = __riscv_vcreate_v_i32m2_i32m8(inner_acc4, inner_acc5, inner_acc6, inner_acc7);
-            auto store_unpack = [](const vint32m8_t iacc, int32_t *C_start) {
-                const size_t vl_m8 = __riscv_vsetvlmax_e32m8();
-                int32_t *a1 = C_start;
-                int32_t *a2 = a1 + 16;
-                int32_t *a3 = a2 + 16;
-                int32_t *a4 = a3 + 16;
-                int32_t *a2_off = a2 - 4;
-                int32_t *a4_off = a4 - 4;
+            int32_t *component = reduction_components + reductionCount * kOutputM * kOutputN;
+            size_t vl_m1 = __riscv_vsetvlmax_e32m1();
+            vuint32m1_t idx = __riscv_vid_v_u32m1(vl_m1);
+            vbool32_t mask32_4 = __riscv_vmsgtu_vx_u32m1_b32(idx, 3, vl_m1);
+            asm volatile("" : : "vr"(mask32_4));
 
-                auto make_high4_mask_e32mf2 = []() -> vbool32_t {
-                    size_t vl = __riscv_vsetvlmax_e32m1();
-                    vuint32m1_t idx = __riscv_vid_v_u32m1(vl);
-                    return __riscv_vmsgtu_vx_u32m1_b32(idx, 3, vl);
-                };
-                vbool32_t mask32_4 = make_high4_mask_e32mf2();
+            size_t vl_mf2 = __riscv_vsetvlmax_e32mf2();
 
-                asm volatile("" : : "vr"(mask32_4));
+#define SPLIT_ACCUMULATOR(index, unused)                                                                                 \
+    vint32m1_t acc_low##index = __riscv_vget_v_i32m2_i32m1(inner_acc##index, 0);                                        \
+    vint32m1_t acc_high##index = __riscv_vget_v_i32m2_i32m1(inner_acc##index, 1);
+#define STORE_LOW(index, unused)                                                                                         \
+    __riscv_vse32_v_i32mf2(component + (index / 4) * 4 * kOutputN + (index % 4) * 4,                                    \
+                            __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_low##index), vl_mf2);                                 \
+    __riscv_vse32_v_i32mf2(component + (index / 4) * 4 * kOutputN + 2 * kOutputN + (index % 4) * 4,                      \
+                            __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_high##index), vl_mf2);
+#define STORE_HIGH(index, unused)                                                                                        \
+    __riscv_vse32_v_i32m1_m(mask32_4, component + (index / 4) * 4 * kOutputN + (index % 4) * 4 + 12,                    \
+                             acc_low##index, vl_m1);                                                                      \
+    __riscv_vse32_v_i32m1_m(mask32_4,                                                                                   \
+                             component + (index / 4) * 4 * kOutputN + 2 * kOutputN + (index % 4) * 4 + 12,              \
+                             acc_high##index, vl_m1);
+#define KEEP_LIVE(index, unused) , "vr"(acc_low##index), "vr"(acc_high##index)
 
-                size_t vl_mf2 = __riscv_vsetvlmax_e32mf2();
-                size_t vl_m1 = __riscv_vsetvlmax_e32m1();
+            REPEAT_8(SPLIT_ACCUMULATOR, _)
+            REPEAT_8(STORE_LOW, _)
 
-                vint32m1_t acc_0 = __riscv_vget_v_i32m8_i32m1(iacc, 0);
-                vint32m1_t acc_1 = __riscv_vget_v_i32m8_i32m1(iacc, 1);
-                vint32m1_t acc_2 = __riscv_vget_v_i32m8_i32m1(iacc, 2);
-                vint32m1_t acc_3 = __riscv_vget_v_i32m8_i32m1(iacc, 3);
-                vint32m1_t acc_4 = __riscv_vget_v_i32m8_i32m1(iacc, 4);
-                vint32m1_t acc_5 = __riscv_vget_v_i32m8_i32m1(iacc, 5);
-                vint32m1_t acc_6 = __riscv_vget_v_i32m8_i32m1(iacc, 6);
-                vint32m1_t acc_7 = __riscv_vget_v_i32m8_i32m1(iacc, 7);
+            asm volatile("" : : "r"(component) REPEAT_8(KEEP_LIVE, _));
 
-                __riscv_vse32_v_i32mf2(a1, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_0), vl_mf2);
-                a1 += 4;
-                __riscv_vse32_v_i32mf2(a3, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_1), vl_mf2);
-                a3 += 4;
-                __riscv_vse32_v_i32mf2(a1, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_2), vl_mf2);
-                a1 += 4;
-                __riscv_vse32_v_i32mf2(a3, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_3), vl_mf2);
-                a3 += 4;
-                __riscv_vse32_v_i32mf2(a1, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_4), vl_mf2);
-                a1 += 4;
-                __riscv_vse32_v_i32mf2(a3, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_5), vl_mf2);
-                a3 += 4;
-                __riscv_vse32_v_i32mf2(a1, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_6), vl_mf2);
-                __riscv_vse32_v_i32mf2(a3, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_7), vl_mf2);
+            REPEAT_8(STORE_HIGH, _)
 
-                asm volatile("" : : "vr"(acc_0), "vr"(acc_1), "vr"(acc_2), "vr"(acc_3), "vr"(acc_4), "vr"(acc_5), "vr"(acc_6), "vr"(acc_7));
-
-                __riscv_vse32_v_i32m1_m(mask32_4, a2_off, acc_0, vl_m1);
-                a2_off += 4;
-                __riscv_vse32_v_i32m1_m(mask32_4, a4_off, acc_1, vl_m1);
-                a4_off += 4;
-                __riscv_vse32_v_i32m1_m(mask32_4, a2_off, acc_2, vl_m1);
-                a2_off += 4;
-                __riscv_vse32_v_i32m1_m(mask32_4, a4_off, acc_3, vl_m1);
-                a4_off += 4;
-                __riscv_vse32_v_i32m1_m(mask32_4, a2_off, acc_4, vl_m1);
-                a2_off += 4;
-                __riscv_vse32_v_i32m1_m(mask32_4, a4_off, acc_5, vl_m1);
-                a4_off += 4;
-                __riscv_vse32_v_i32m1_m(mask32_4, a2_off, acc_6, vl_m1);
-                __riscv_vse32_v_i32m1_m(mask32_4, a4_off, acc_7, vl_m1);
-            };
-            store_unpack(acc_m8_0, reduction_component_0 + reductionCount * 4 * kOutputN);
-            store_unpack(acc_m8_1, reduction_component_1 + reductionCount * 4 * kOutputN);
+#undef KEEP_LIVE
+#undef STORE_HIGH
+#undef STORE_LOW
+#undef SPLIT_ACCUMULATOR
 
             bk++;
             reductionCount++;
             if (reductionCount == kRedBatchSize or bk == BlockCountK) {
                 const size_t reductionBlockStart = bk - reductionCount;
-                auto reduce_4x16 = [&](const int32_t *components, float *accumulator, size_t aScaleOffset) {
-                    vfloat32m2_t acc_0 = __riscv_vle32_v_f32m2(accumulator + 0 * kOutputN, vl(32, 2));
-                    vfloat32m2_t acc_1 = __riscv_vle32_v_f32m2(accumulator + 1 * kOutputN, vl(32, 2));
-                    vfloat32m2_t acc_2 = __riscv_vle32_v_f32m2(accumulator + 2 * kOutputN, vl(32, 2));
-                    vfloat32m2_t acc_3 = __riscv_vle32_v_f32m2(accumulator + 3 * kOutputN, vl(32, 2));
-                    for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
-                        const size_t reductionBlock = reductionBlockStart + reductionIndex;
-                        const int32_t *component = components + reductionIndex * 4 * kOutputN;
-                        vint32m2_t component_0_i = __riscv_vle32_v_i32m2(component + 0 * kOutputN, vl(32, 2));
-                        vint32m2_t component_1_i = __riscv_vle32_v_i32m2(component + 1 * kOutputN, vl(32, 2));
-                        vint32m2_t component_2_i = __riscv_vle32_v_i32m2(component + 2 * kOutputN, vl(32, 2));
-                        vint32m2_t component_3_i = __riscv_vle32_v_i32m2(component + 3 * kOutputN, vl(32, 2));
-                        vfloat16m1_t bsh = __riscv_vle16_v_f16m1(
-                            (_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * 16 + reductionBlock * 16), vl(16, 1));
-                        float as0 = baseBlockA[reductionBlock].d[aScaleOffset + 0];
-                        float as1 = baseBlockA[reductionBlock].d[aScaleOffset + 1];
-                        float as2 = baseBlockA[reductionBlock].d[aScaleOffset + 2];
-                        float as3 = baseBlockA[reductionBlock].d[aScaleOffset + 3];
-                        vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, vl(16, 1));
-                        vfloat32m2_t component_0 = __riscv_vfcvt_f_x_v_f32m2(component_0_i, vl(32, 2));
-                        vfloat32m2_t component_1 = __riscv_vfcvt_f_x_v_f32m2(component_1_i, vl(32, 2));
-                        vfloat32m2_t component_2 = __riscv_vfcvt_f_x_v_f32m2(component_2_i, vl(32, 2));
-                        vfloat32m2_t component_3 = __riscv_vfcvt_f_x_v_f32m2(component_3_i, vl(32, 2));
+#define LOAD_REDUCTION_ACCUMULATOR(index, unused)                                                                        \
+    vfloat32m2_t reduction_acc##index = __riscv_vle32_v_f32m2(acc + index * kOutputN, vl(32, 2));
+#define REDUCE_ROW(index, unused)                                                                                         \
+    {                                                                                                                    \
+        vint32m2_t component_i = __riscv_vle32_v_i32m2(component + index * kOutputN, vl(32, 2));                         \
+        vfloat32m2_t component_f = __riscv_vfcvt_f_x_v_f32m2(component_i, vl(32, 2));                                   \
+        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseBlockA[reductionBlock].d[index], vl(32, 2));               \
+        reduction_acc##index = __riscv_vfmacc_vv_f32m2(reduction_acc##index, component_f, abscale, vl(32, 2));           \
+    }
+#define REDUCTION_BARRIER(index0, index1, index2, index3)                                                                \
+    asm volatile(""                                                                                                      \
+                 : "+vr"(reduction_acc##index0), "+vr"(reduction_acc##index1), "+vr"(reduction_acc##index2),           \
+                   "+vr"(reduction_acc##index3)                                                                          \
+                 :                                                                                                       \
+                 : "memory");
+#define REDUCE_ROW_QUAD(index0, index1, index2, index3)                                                                  \
+    REDUCE_ROW(index0, _)                                                                                                \
+    REDUCE_ROW(index1, _)                                                                                                \
+    REDUCE_ROW(index2, _)                                                                                                \
+    REDUCE_ROW(index3, _)                                                                                                \
+    REDUCTION_BARRIER(index0, index1, index2, index3)
+#define STORE_REDUCTION_ACCUMULATOR(index, unused)                                                                       \
+    __riscv_vse32_v_f32m2(acc + index * kOutputN, reduction_acc##index, vl(32, 2));
 
-                        vfloat32m2_t abscale_0 = __riscv_vfmul_vf_f32m2(bs, as0, vl(32, 2));
-                        vfloat32m2_t abscale_1 = __riscv_vfmul_vf_f32m2(bs, as1, vl(32, 2));
-                        vfloat32m2_t abscale_2 = __riscv_vfmul_vf_f32m2(bs, as2, vl(32, 2));
-                        vfloat32m2_t abscale_3 = __riscv_vfmul_vf_f32m2(bs, as3, vl(32, 2));
-                        acc_0 = __riscv_vfmacc_vv_f32m2(acc_0, component_0, abscale_0, vl(32, 2));
-                        acc_1 = __riscv_vfmacc_vv_f32m2(acc_1, component_1, abscale_1, vl(32, 2));
-                        acc_2 = __riscv_vfmacc_vv_f32m2(acc_2, component_2, abscale_2, vl(32, 2));
-                        acc_3 = __riscv_vfmacc_vv_f32m2(acc_3, component_3, abscale_3, vl(32, 2));
-                    }
-                    __riscv_vse32_v_f32m2(accumulator + 0 * kOutputN, acc_0, vl(32, 2));
-                    __riscv_vse32_v_f32m2(accumulator + 1 * kOutputN, acc_1, vl(32, 2));
-                    __riscv_vse32_v_f32m2(accumulator + 2 * kOutputN, acc_2, vl(32, 2));
-                    __riscv_vse32_v_f32m2(accumulator + 3 * kOutputN, acc_3, vl(32, 2));
-                };
-                reduce_4x16(reduction_component_0, acc, 0);
-                reduce_4x16(reduction_component_1, acc + 4 * kOutputN, 4);
+                REPEAT_8(LOAD_REDUCTION_ACCUMULATOR, _)
+
+                for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
+                    const size_t reductionBlock = reductionBlockStart + reductionIndex;
+                    const int32_t *component = reduction_components + reductionIndex * kOutputM * kOutputN;
+                    vfloat16m1_t bsh = __riscv_vle16_v_f16m1(
+                        (_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), vl(16, 1));
+                    vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, vl(16, 1));
+
+                    REDUCE_ROW_QUAD(0, 1, 2, 3)
+                    REDUCE_ROW_QUAD(4, 5, 6, 7)
+                }
+
+                REPEAT_8(STORE_REDUCTION_ACCUMULATOR, _)
+
+#undef STORE_REDUCTION_ACCUMULATOR
+#undef REDUCE_ROW_QUAD
+#undef REDUCTION_BARRIER
+#undef REDUCE_ROW
+#undef LOAD_REDUCTION_ACCUMULATOR
                 reductionCount = 0;
             }
         }
