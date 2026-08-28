@@ -19,11 +19,14 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTR
         auto curr_B_row = &B[n / 16 * BlockCountK];
         float *CPtr = C + n;
 
-        vfloat32m8_t acc;
+        vfloat32m2_t acc_0, acc_1, acc_2, acc_3;
 
         {
-            size_t vl = __riscv_vsetvlmax_e32m8();
-            acc = __riscv_vfmv_v_f_f32m8(0.0f, vl);
+            size_t vl = __riscv_vsetvlmax_e32m2();
+            acc_0 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+            acc_1 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+            acc_2 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+            acc_3 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
         }
 
         for (size_t bk = 0; bk < BlockCountK; ++bk) {
@@ -125,15 +128,19 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTR
             scale_2 = __riscv_vfmul_vv_f32m2(scale_2, A_scale, 16);
             auto scale_3 = __riscv_vcreate_v_f32m1_f32m2(scale_lo3, scale_lo3);
             scale_3 = __riscv_vfmul_vv_f32m2(scale_3, A_scale, 16);
-            vfloat32m8_t scale_full = __riscv_vcreate_v_f32m2_f32m8(scale_0, scale_1, scale_2, scale_3);
+            size_t vl_m2 = __riscv_vsetvlmax_e32m2();
+            vfloat32m2_t inner_f0 = __riscv_vfcvt_f_x_v_f32m2(inner_acc0, vl_m2);
+            vfloat32m2_t inner_f1 = __riscv_vfcvt_f_x_v_f32m2(inner_acc1, vl_m2);
+            vfloat32m2_t inner_f2 = __riscv_vfcvt_f_x_v_f32m2(inner_acc2, vl_m2);
+            vfloat32m2_t inner_f3 = __riscv_vfcvt_f_x_v_f32m2(inner_acc3, vl_m2);
 
-            vint32m8_t inner_acc_full = __riscv_vcreate_v_i32m2_i32m8(inner_acc0, inner_acc1, inner_acc2, inner_acc3);
-
-            size_t vl_m8 = __riscv_vsetvlmax_e32m8();
-            vfloat32m8_t inner_f = __riscv_vfcvt_f_x_v_f32m8(inner_acc_full, vl_m8);
-
-            acc = __riscv_vfmacc_vv_f32m8(acc, inner_f, scale_full, vl_m8);
+            acc_0 = __riscv_vfmacc_vv_f32m2(acc_0, inner_f0, scale_0, vl_m2);
+            acc_1 = __riscv_vfmacc_vv_f32m2(acc_1, inner_f1, scale_1, vl_m2);
+            acc_2 = __riscv_vfmacc_vv_f32m2(acc_2, inner_f2, scale_2, vl_m2);
+            acc_3 = __riscv_vfmacc_vv_f32m2(acc_3, inner_f3, scale_3, vl_m2);
         }
+
+        vfloat32m8_t acc = __riscv_vcreate_v_f32m2_f32m8(acc_0, acc_1, acc_2, acc_3);
 
         auto store_unpack = [](vfloat32m8_t acc, float *dst, size_t row_stride) {
             float *a1 = dst;
