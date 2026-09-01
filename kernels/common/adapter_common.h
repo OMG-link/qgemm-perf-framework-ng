@@ -8,19 +8,41 @@
 
 namespace ime::bench::adapters {
 
-struct CommonState {
-    size_t m = 0;
-    size_t n = 0;
-    size_t k = 0;
-    size_t blocks_k = 0;
-    std::vector<std::byte> packed_a_m4;
-    std::vector<block_q4_0x16> packed_b;
-    std::vector<float> output;
+class CommonState {
+public:
+    virtual ~CommonState() = default;
+    size_t m() const noexcept { return m_value; }
+    size_t n() const noexcept { return n_value; }
+    size_t k() const noexcept { return k_value; }
+    size_t blocks_k() const noexcept { return blocks_k_value; }
+    std::vector<float> &output() noexcept { return output_value; }
+    const std::vector<float> &output() const noexcept { return output_value; }
+
+    size_t m_value = 0;
+    size_t n_value = 0;
+    size_t k_value = 0;
+    size_t blocks_k_value = 0;
+    std::vector<float> output_value;
 };
 
-ValidationResult validate_m4_shape(const BenchmarkRequest &request);
-ValidationResult validate_m8_shape(const BenchmarkRequest &request);
-PrepareResult prepare_common(const BenchmarkRequest &request, const BenchmarkInput &input);
+template <size_t MMultiple, size_t NMultiple, size_t KMultiple>
+ValidationResult validate_shape(const BenchmarkRequest &request) {
+    static_assert(MMultiple > 0 && NMultiple > 0 && KMultiple > 0);
+    if (!request.m || !request.n || !request.k) {
+        return {false, "M, N and K must be positive"};
+    }
+    if (request.m % MMultiple) {
+        return {false, "M must be divisible by " + std::to_string(MMultiple)};
+    }
+    if (request.n % NMultiple) {
+        return {false, "N must be divisible by " + std::to_string(NMultiple)};
+    }
+    if (request.k % KMultiple) {
+        return {false, "K must be divisible by " + std::to_string(KMultiple)};
+    }
+    return {true, {}};
+}
+
 void reset_common(KernelState state);
 ExportResult export_common(KernelState state, std::span<float> output);
 double checksum_common(KernelState state);
