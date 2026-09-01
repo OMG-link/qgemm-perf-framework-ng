@@ -9,17 +9,23 @@ set(IME_ARCH "rv64gcv_zvfh_zicbop_zba_xsmtvdot" CACHE STRING
 set(IME_TUNE "spacemit-x60" CACHE STRING
     "RISC-V CPU tuning target")
 
-add_library(ime_compile_options INTERFACE)
-target_compile_features(ime_compile_options INTERFACE cxx_std_20)
-target_compile_definitions(ime_compile_options INTERFACE SPACEMIT_X60)
-target_compile_options(ime_compile_options INTERFACE
+add_library(ime_base_compile_options INTERFACE)
+target_compile_features(ime_base_compile_options INTERFACE cxx_std_20)
+target_compile_definitions(ime_base_compile_options INTERFACE SPACEMIT_X60)
+target_compile_options(ime_base_compile_options INTERFACE
     -march=${IME_ARCH}
     -mtune=${IME_TUNE}
+    "SHELL:-mllvm --misched-cluster=false"
+)
+target_include_directories(ime_base_compile_options INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+add_library(ime_compile_options INTERFACE)
+target_link_libraries(ime_compile_options INTERFACE ime_base_compile_options)
+target_compile_options(ime_compile_options INTERFACE
     "SHELL:-mllvm -riscv-v-vector-bits-min=256"
     "SHELL:-mllvm -riscv-v-vector-bits-max=256"
-)
-target_include_directories(ime_compile_options INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 add_library(ime-kernels STATIC
@@ -33,7 +39,25 @@ add_library(ime-kernels STATIC
     kernels/m4_immediate_reduction/adapter.cpp
     kernels/m8_batch_reduction/kernel.cpp
     kernels/m8_batch_reduction/adapter.cpp
+    kernels/q4_0-q8_0-RVV-my/kernel.cpp
+    kernels/q4_0-q8_0-RVV-my/adapter.cpp
+    kernels/q4_0-q8_0-RVV-upstream/kernel.cpp
+    kernels/q4_0-q8_0-RVV-upstream/adapter.cpp
+    $<TARGET_OBJECTS:q4_0_rvv_group_objects>
 )
+
+add_library(q4_0_rvv_group_objects OBJECT
+    kernels/q4_0-q8_0-RVV-group/kernel.cpp
+    kernels/q4_0-q8_0-RVV-group/adapter.cpp
+)
+target_include_directories(q4_0_rvv_group_objects PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
+)
+target_link_libraries(q4_0_rvv_group_objects PRIVATE ime_base_compile_options)
+target_compile_options(q4_0_rvv_group_objects PRIVATE -Wall -Wextra)
+
 target_include_directories(ime-kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
@@ -69,6 +93,13 @@ set(IME_ASM_DIR ${CMAKE_CURRENT_BINARY_DIR}/asm)
 set(IME_ASM_OUTPUTS)
 function(add_ime_assembly source stem)
     set(output ${IME_ASM_DIR}/${stem}.s)
+    set(IME_ASM_VLEN_OPTIONS
+        -mllvm -riscv-v-vector-bits-min=256
+        -mllvm -riscv-v-vector-bits-max=256
+    )
+    if(ARGC GREATER 2 AND ARGV2 STREQUAL "NO_VLEN")
+        set(IME_ASM_VLEN_OPTIONS)
+    endif()
     add_custom_command(
         OUTPUT ${output}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${IME_ASM_DIR}
@@ -77,8 +108,8 @@ function(add_ime_assembly source stem)
             -DSPACEMIT_X60
             -march=${IME_ARCH}
             -mtune=${IME_TUNE}
-            -mllvm -riscv-v-vector-bits-min=256
-            -mllvm -riscv-v-vector-bits-max=256
+            ${IME_ASM_VLEN_OPTIONS}
+            -mllvm --misched-cluster=false
             -O3
             -I${CMAKE_CURRENT_SOURCE_DIR}/include
             -I${CMAKE_CURRENT_SOURCE_DIR}/bench
@@ -105,6 +136,9 @@ add_ime_assembly(kernels/llama_dispatch/ime1_kernels.cpp llama_dispatch_kernels)
 add_ime_assembly(kernels/m4_batch_reduction/kernel.cpp m4_batch_reduction)
 add_ime_assembly(kernels/m4_immediate_reduction/kernel.cpp m4_immediate_reduction)
 add_ime_assembly(kernels/m8_batch_reduction/kernel.cpp m8_batch_reduction)
+add_ime_assembly(kernels/q4_0-q8_0-RVV-group/kernel.cpp q4_0_q8_0_rvv_group NO_VLEN)
+add_ime_assembly(kernels/q4_0-q8_0-RVV-my/kernel.cpp q4_0_q8_0_rvv_my)
+add_ime_assembly(kernels/q4_0-q8_0-RVV-upstream/kernel.cpp q4_0_q8_0_rvv_upstream)
 add_ime_assembly(bench/main.cpp main)
 
 add_custom_target(assembly DEPENDS ${IME_ASM_OUTPUTS})

@@ -52,6 +52,9 @@ void register_llama_dispatch();
 void register_m4_batch_reduction();
 void register_m4_immediate_reduction();
 void register_m8_batch_reduction();
+void register_q4_0_rvv_group();
+void register_q4_0_rvv_my();
+void register_q4_0_rvv_upstream();
 
 } // namespace ime::bench::adapters
 
