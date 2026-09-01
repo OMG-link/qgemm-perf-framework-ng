@@ -55,6 +55,9 @@ void register_m8_batch_reduction();
 void register_q4_0_rvv_group();
 void register_q4_0_rvv_my();
 void register_q4_0_rvv_upstream();
+void register_q4_K_rvv_group();
+void register_q4_K_rvv_my();
+void register_q4_K_rvv_upstream();
 
 } // namespace ime::bench::adapters
 

@@ -43,6 +43,11 @@ add_library(ime-kernels STATIC
     kernels/q4_0-q8_0-RVV-my/adapter.cpp
     kernels/q4_0-q8_0-RVV-upstream/kernel.cpp
     kernels/q4_0-q8_0-RVV-upstream/adapter.cpp
+    kernels/q4_K-q8_K-RVV-group/adapter.cpp
+    kernels/q4_K-q8_K-RVV-my/adapter.cpp
+    kernels/q4_K-q8_K-RVV-upstream/adapter.cpp
+    $<TARGET_OBJECTS:q4_K_rvv_group_objects>
+    $<TARGET_OBJECTS:q4_K_rvv_my_objects>
     $<TARGET_OBJECTS:q4_0_rvv_group_objects>
 )
 
@@ -57,6 +62,18 @@ target_include_directories(q4_0_rvv_group_objects PRIVATE
 )
 target_link_libraries(q4_0_rvv_group_objects PRIVATE ime_base_compile_options)
 target_compile_options(q4_0_rvv_group_objects PRIVATE -Wall -Wextra)
+
+add_library(q4_K_rvv_group_objects OBJECT kernels/q4_K-q8_K-RVV-group/kernel.cpp)
+target_include_directories(q4_K_rvv_group_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-group)
+target_link_libraries(q4_K_rvv_group_objects PRIVATE ime_base_compile_options)
+target_compile_definitions(q4_K_rvv_group_objects PRIVATE ggml_gemm_q4_K_8x32_q8_K=ggml_gemm_q4_K_8x32_q8_K_group)
+target_compile_options(q4_K_rvv_group_objects PRIVATE -Wall -Wextra)
+
+add_library(q4_K_rvv_my_objects OBJECT kernels/q4_K-q8_K-RVV-my/kernel.cpp)
+target_include_directories(q4_K_rvv_my_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-my)
+target_link_libraries(q4_K_rvv_my_objects PRIVATE ime_compile_options)
+target_compile_definitions(q4_K_rvv_my_objects PRIVATE ggml_gemm_q4_K_8x32_q8_K=ggml_gemm_q4_K_8x32_q8_K_my)
+target_compile_options(q4_K_rvv_my_objects PRIVATE -Wall -Wextra)
 
 target_include_directories(ime-kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
@@ -139,6 +156,9 @@ add_ime_assembly(kernels/m8_batch_reduction/kernel.cpp m8_batch_reduction)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-group/kernel.cpp q4_0_q8_0_rvv_group NO_VLEN)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-my/kernel.cpp q4_0_q8_0_rvv_my)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-upstream/kernel.cpp q4_0_q8_0_rvv_upstream)
+add_ime_assembly(kernels/q4_K-q8_K-RVV-group/kernel.cpp q4_K_q8_K_rvv_group NO_VLEN)
+add_ime_assembly(kernels/q4_K-q8_K-RVV-my/kernel.cpp q4_K_q8_K_rvv_my)
+add_ime_assembly(kernels/q4_K-q8_K-RVV-upstream/adapter.cpp q4_K_q8_K_rvv_upstream)
 add_ime_assembly(bench/main.cpp main)
 
 add_custom_target(assembly DEPENDS ${IME_ASM_OUTPUTS})

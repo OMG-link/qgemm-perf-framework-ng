@@ -34,6 +34,9 @@ int main(int argc, char **argv) {
     adapters::register_q4_0_rvv_group();
     adapters::register_q4_0_rvv_my();
     adapters::register_q4_0_rvv_upstream();
+    adapters::register_q4_K_rvv_group();
+    adapters::register_q4_K_rvv_my();
+    adapters::register_q4_K_rvv_upstream();
 
     BenchmarkRequest request;
     std::string_view selected = "all";
@@ -81,8 +84,10 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
-    const auto input_owner = create_input(kernels.front()->quantization, request);
-    const auto input = input_owner.view();
+    const auto q4_0_owner = kernels.front()->quantization == QuantizationType::WeightQ4_0ActivationQ8_0
+                                ? std::variant<OwnedQ4_0Q8_0Input, OwnedQ4_KQ8_KInput>(create_input(kernels.front()->quantization, request))
+                                : std::variant<OwnedQ4_0Q8_0Input, OwnedQ4_KQ8_KInput>(create_q4_K_input(request));
+    const auto input = std::visit([](const auto &owner) { return owner.view(); }, q4_0_owner);
     bool failed = false;
     for (const auto *kernel : kernels) {
         const auto result = run_benchmark(*kernel, request, input);

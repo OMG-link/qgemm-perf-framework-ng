@@ -33,6 +33,22 @@ OwnedQ4_0Q8_0Input create_input(QuantizationType type, const BenchmarkRequest &r
     return input;
 }
 
+OwnedQ4_KQ8_KInput create_q4_K_input(const BenchmarkRequest &request) {
+    OwnedQ4_KQ8_KInput input{.m = request.m, .n = request.n, .k = request.k};
+    input.activation.resize(request.m * request.k);
+    std::vector<float> weights(request.n * request.k);
+    std::mt19937 generator(static_cast<uint32_t>(request.seed));
+    std::uniform_real_distribution<float> distribution(-1.0f, 1.0f);
+    for (float &v : input.activation)
+        v = distribution(generator);
+    for (float &v : weights)
+        v = distribution(generator);
+    input.weight.resize(request.n * (request.k / QK_K));
+    for (size_t n = 0; n < request.n; ++n)
+        llama_reference::quantize_row_q4_K(weights.data() + n * request.k, input.weight.data() + n * (request.k / QK_K), request.k);
+    return input;
+}
+
 BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkRequest &request,
                               const BenchmarkInput &input) {
     BenchmarkResult result;

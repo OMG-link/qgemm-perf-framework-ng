@@ -15,6 +15,15 @@ struct OwnedQ4_0Q8_0Input {
     BenchmarkInput view() const;
 };
 
+struct OwnedQ4_KQ8_KInput {
+    size_t m = 0;
+    size_t n = 0;
+    size_t k = 0;
+    std::vector<float> activation;
+    std::vector<block_q4_K> weight;
+    BenchmarkInput view() const;
+};
+
 struct BenchmarkResult {
     std::string kernel_id;
     bool skipped = false;
@@ -32,6 +41,7 @@ struct BenchmarkResult {
 };
 
 OwnedQ4_0Q8_0Input create_input(QuantizationType type, const BenchmarkRequest &request);
+OwnedQ4_KQ8_KInput create_q4_K_input(const BenchmarkRequest &request);
 BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkRequest &request,
                               const BenchmarkInput &input);
 
