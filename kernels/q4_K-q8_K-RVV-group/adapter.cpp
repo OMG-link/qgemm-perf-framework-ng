@@ -21,8 +21,8 @@ uint8_t q4_min(const block_q4_K &block, size_t index) {
 }
 
 uint8_t q4_value(const block_q4_K &block, size_t index) {
-    const uint8_t packed = block.qs[index % 128];
-    return index < 128 ? packed & 0x0f : packed >> 4;
+    const uint8_t packed = block.qs[(index / 64) * 32 + index % 32];
+    return index % 64 < 32 ? packed & 0x0f : packed >> 4;
 }
 
 void pack_group_subblock(uint8_t *destination, std::span<const block_q4_K> source, size_t subblock) {

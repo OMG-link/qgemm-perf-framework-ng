@@ -2,13 +2,7 @@
 #include "llama_reference.h"
 #include <memory>
 
-void ggml_vec_dot_q4_K_q8_K(int n, float *s, size_t, const void *vx, size_t, const void *vy, size_t, int) {
-    const auto *x = static_cast<const block_q4_K *>(vx);
-    const auto *y = static_cast<const block_q8_K *>(vy);
-    *s = 0.0f;
-    for (int i = 0; i < n / QK_K; ++i)
-        *s += ime::bench::llama_reference::dot_q4_K_q8_K(x[i], y[i]);
-}
+void ggml_vec_dot_q4_K_q8_K(int, float *, size_t, const void *, size_t, const void *, size_t, int);
 
 namespace ime::bench::adapters {
 namespace {
@@ -43,7 +37,7 @@ void run(KernelState p, size_t it) noexcept {
 } // namespace
 void register_q4_K_rvv_upstream() {
     register_kernel({"q4_K-q8_K-RVV-upstream",
-                     "Q4_K/Q8_K upstream dot",
+                     "Q4_K/Q8_K RVV upstream dot",
                      QuantizationType::WeightQ4_KActivationQ8_K,
                      {validate_shape<1, 1, 256>, prepare, reset_common, run, export_common, checksum_common, [](KernelState p) noexcept { delete static_cast<State *>(p); }}});
 }

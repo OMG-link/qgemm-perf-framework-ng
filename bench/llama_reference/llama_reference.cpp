@@ -99,11 +99,13 @@ void quantize_row_q4_K(const float *input, block_q4_K *output, size_t count) {
             o.scales[i + 4] = m[i] | ((m[i + 4] & 3) << 6);
             o.scales[i + 8] = (s[i + 4] >> 2) | ((m[i + 4] >> 2) << 4);
         }
-        for (size_t sb = 0; sb < 4; ++sb)
+        for (size_t pair = 0; pair < 4; ++pair)
             for (size_t j = 0; j < 32; ++j) {
-                const int low = std::clamp(static_cast<int>(std::round(input[b * QK_K + sb * 32 + j] / (ls[sb] ? ls[sb] : 1.0f) + lm[sb])), 0, 15);
-                const int high = std::clamp(static_cast<int>(std::round(input[b * QK_K + (sb + 4) * 32 + j] / (ls[sb + 4] ? ls[sb + 4] : 1.0f) + lm[sb + 4])), 0, 15);
-                o.qs[sb * 32 + j] = static_cast<uint8_t>(low | (high << 4));
+                const size_t low_subblock = pair * 2;
+                const size_t high_subblock = low_subblock + 1;
+                const int low = std::clamp(static_cast<int>(std::round(input[b * QK_K + low_subblock * 32 + j] / (ls[low_subblock] ? ls[low_subblock] : 1.0f) + lm[low_subblock])), 0, 15);
+                const int high = std::clamp(static_cast<int>(std::round(input[b * QK_K + high_subblock * 32 + j] / (ls[high_subblock] ? ls[high_subblock] : 1.0f) + lm[high_subblock])), 0, 15);
+                o.qs[pair * 32 + j] = static_cast<uint8_t>(low | (high << 4));
             }
     }
 }
@@ -122,8 +124,8 @@ float dot_q4_K_q8_K(const block_q4_K &w, const block_q8_K &a) {
     float sum = 0.0f;
     for (size_t sb = 0; sb < 8; ++sb)
         for (size_t j = 0; j < 32; ++j) {
-            const uint8_t packed = w.qs[(sb % 4) * 32 + j];
-            const int q = sb < 4 ? packed & 15 : packed >> 4;
+            const uint8_t packed = w.qs[(sb / 2) * 32 + j];
+            const int q = sb % 2 == 0 ? packed & 15 : packed >> 4;
             sum += a.qs[sb * 32 + j] * (d * scales[sb] * q - dmin * mins[sb]);
         }
     return a.d * sum;

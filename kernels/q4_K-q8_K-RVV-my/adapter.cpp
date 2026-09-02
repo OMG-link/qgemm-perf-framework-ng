@@ -7,8 +7,8 @@ namespace ime::bench::adapters {
 namespace {
 
 uint8_t q4_value(const block_q4_K &block, size_t index) {
-    const uint8_t packed = block.qs[index % 128];
-    return index < 128 ? packed & 0x0f : packed >> 4;
+    const uint8_t packed = block.qs[(index / 64) * 32 + index % 32];
+    return index % 64 < 32 ? packed & 0x0f : packed >> 4;
 }
 
 struct PackedQ4K32 {

@@ -46,6 +46,7 @@ add_library(ime-kernels STATIC
     kernels/q4_0-q8_0-RVV-upstream/adapter.cpp
     kernels/q4_K-q8_K-RVV-group/adapter.cpp
     kernels/q4_K-q8_K-RVV-my/adapter.cpp
+    kernels/q4_K-q8_K-RVV-upstream/kernel.cpp
     kernels/q4_K-q8_K-RVV-upstream/adapter.cpp
     kernels/iq2_xxs-q8_K-RVV-upstream/kernel.cpp
     $<TARGET_OBJECTS:q4_K_rvv_group_objects>
@@ -209,7 +210,7 @@ add_ime_assembly(kernels/q4_0-q8_0-RVV-my/kernel.cpp q4_0_q8_0_rvv_my)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-upstream/kernel.cpp q4_0_q8_0_rvv_upstream)
 add_ime_assembly(kernels/q4_K-q8_K-RVV-group/kernel.cpp q4_K_q8_K_rvv_group NO_VLEN)
 add_ime_assembly(kernels/q4_K-q8_K-RVV-my/kernel.cpp q4_K_q8_K_rvv_my)
-add_ime_assembly(kernels/q4_K-q8_K-RVV-upstream/adapter.cpp q4_K_q8_K_rvv_upstream)
+add_ime_assembly(kernels/q4_K-q8_K-RVV-upstream/kernel.cpp q4_K_q8_K_rvv_upstream)
 add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp iq2_xxs_q8_K_rvv_my_br)
 add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp iq2_xxs_q8_K_rvv_my_ir)
 add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-upstream/kernel.cpp iq2_xxs_q8_K_rvv_upstream)
