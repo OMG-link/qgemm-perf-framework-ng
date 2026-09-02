@@ -182,6 +182,11 @@ struct block_q8_K {
     int16_t bsums[QK_K / 16];
 };
 
+struct block_iq2_xxs {
+    ggml_half d;
+    uint16_t qs[QK_K / 8];
+};
+
 #define GGML_COMMON_AGGR_U
 #define GGML_COMMON_AGGR_S
 
@@ -204,5 +209,6 @@ static_assert(sizeof(block_q4_0x32) == 32 * sizeof(ggml_half) + 32 * QK4_0 / 2);
 static_assert(sizeof(block_q8_0x12) == 12 * sizeof(ggml_half) + 12 * QK8_0);
 static_assert(sizeof(block_q8_0x4_scale32) == 4 * sizeof(float) + 4 * QK8_0);
 static_assert(sizeof(block_q8_0x8_scale32) == 8 * sizeof(float) + 8 * QK8_0);
+static_assert(sizeof(block_iq2_xxs) == sizeof(ggml_half) + QK_K / 4);
 
 #endif

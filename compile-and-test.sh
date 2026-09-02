@@ -68,7 +68,7 @@ case "${command}" in
         shift || true
         build
         if [[ $# -eq 0 ]]; then
-            run_remote --kernel all --m 8 --n 16 --k 32 --samples 3 --iterations 10
+            run_remote --kernel all --m 24 --n 32 --k 256 --samples 3 --iterations 10
         else
             run_remote "$@"
         fi

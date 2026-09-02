@@ -25,6 +25,12 @@ assembly output and `clean` removes generated build artifacts.
 The toolchain, compiler, deployment target, and build directory can be
 overridden with `TOOLCHAIN_DIR`, `CXX`, `DEPLOYMENT_SERVER`, and `BUILD_DIR`.
 
+The IQ2_XXS TCM variants require a RISC-V `fine_mm_*` runtime. CMake detects
+`../tcm/libfine_tcm_mm.a` when present; otherwise pass
+`-DIME_TCM_RUNTIME=/absolute/path/to/libfine_tcm_mm.a`. Use
+`-DIME_ENABLE_TCM=OFF` to build only the non-TCM variants. The benchmark owns
+the allocator lifecycle and initializes a 256 KiB TCM pool before first use.
+
 ## Benchmark options
 
 The benchmark accepts the following general options:

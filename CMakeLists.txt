@@ -30,6 +30,7 @@ target_compile_options(ime_compile_options INTERFACE
 
 add_library(ime-kernels STATIC
     kernels/common/adapter_common.cpp
+    kernels/common/iq2_xxs_adapter.cpp
     kernels/llama_dispatch/wrapper.cpp
     kernels/llama_dispatch/ime1_kernels.cpp
     kernels/llama_dispatch/adapter.cpp
@@ -46,9 +47,12 @@ add_library(ime-kernels STATIC
     kernels/q4_K-q8_K-RVV-group/adapter.cpp
     kernels/q4_K-q8_K-RVV-my/adapter.cpp
     kernels/q4_K-q8_K-RVV-upstream/adapter.cpp
+    kernels/iq2_xxs-q8_K-RVV-upstream/kernel.cpp
     $<TARGET_OBJECTS:q4_K_rvv_group_objects>
     $<TARGET_OBJECTS:q4_K_rvv_my_objects>
     $<TARGET_OBJECTS:q4_0_rvv_group_objects>
+    $<TARGET_OBJECTS:iq2_xxs_rvv_br_objects>
+    $<TARGET_OBJECTS:iq2_xxs_rvv_ir_objects>
 )
 
 add_library(q4_0_rvv_group_objects OBJECT
@@ -74,6 +78,53 @@ target_include_directories(q4_K_rvv_my_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DI
 target_link_libraries(q4_K_rvv_my_objects PRIVATE ime_compile_options)
 target_compile_definitions(q4_K_rvv_my_objects PRIVATE ggml_gemm_q4_K_8x32_q8_K=ggml_gemm_q4_K_8x32_q8_K_my)
 target_compile_options(q4_K_rvv_my_objects PRIVATE -Wall -Wextra)
+
+function(add_iq2_xxs_gemm_object target directory symbol pack_symbol)
+    add_library(${target} OBJECT kernels/${directory}/kernel.cpp)
+    target_include_directories(${target} PRIVATE kernels/${directory})
+    target_link_libraries(${target} PRIVATE ime_compile_options)
+    target_compile_definitions(${target} PRIVATE
+        ggml_gemm_iq2_xxs_q8_K=${symbol}
+        pack_a=${pack_symbol}
+    )
+    target_compile_options(${target} PRIVATE -Wall -Wextra)
+endfunction()
+
+add_iq2_xxs_gemm_object(iq2_xxs_rvv_br_objects iq2_xxs-q8_K-RVV-my-br
+                        ggml_gemm_iq2_xxs_q8_K_br pack_a_iq2_xxs_br)
+add_iq2_xxs_gemm_object(iq2_xxs_rvv_ir_objects iq2_xxs-q8_K-RVV-my-ir
+                        ggml_gemm_iq2_xxs_q8_K_ir pack_a_iq2_xxs_ir)
+
+option(IME_ENABLE_TCM "Build IQ2_XXS kernels that use the fine_mm TCM allocator" ON)
+set(IME_TCM_RUNTIME "" CACHE FILEPATH
+    "Library providing fine_mm_*; required to enable IQ2_XXS TCM kernels")
+set(IME_TCM_RUNTIME_CANDIDATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../tcm/libfine_tcm_mm.a")
+if(IME_ENABLE_TCM AND NOT IME_TCM_RUNTIME AND EXISTS "${IME_TCM_RUNTIME_CANDIDATE}")
+    set(IME_TCM_RUNTIME "${IME_TCM_RUNTIME_CANDIDATE}")
+endif()
+if(IME_ENABLE_TCM AND IME_TCM_RUNTIME)
+    if(NOT EXISTS "${IME_TCM_RUNTIME}")
+        message(FATAL_ERROR "IME_TCM_RUNTIME does not exist: ${IME_TCM_RUNTIME}")
+    endif()
+    add_iq2_xxs_gemm_object(iq2_xxs_rvv_br_tcm_objects iq2_xxs-q8_K-RVV-my-br-tcm
+                            ggml_gemm_iq2_xxs_q8_K_br_tcm pack_a_iq2_xxs_br_tcm)
+    add_iq2_xxs_gemm_object(iq2_xxs_rvv_ir_tcm_objects iq2_xxs-q8_K-RVV-my-ir-tcm
+                            ggml_gemm_iq2_xxs_q8_K_ir_tcm pack_a_iq2_xxs_ir_tcm)
+    target_compile_definitions(iq2_xxs_rvv_br_tcm_objects PRIVATE USE_TCM)
+    target_compile_definitions(iq2_xxs_rvv_ir_tcm_objects PRIVATE USE_TCM)
+    target_sources(ime-kernels PRIVATE
+        $<TARGET_OBJECTS:iq2_xxs_rvv_br_tcm_objects>
+        $<TARGET_OBJECTS:iq2_xxs_rvv_ir_tcm_objects>
+    )
+    target_compile_definitions(ime-kernels PRIVATE IME_HAVE_TCM)
+    target_link_libraries(ime-kernels PUBLIC "${IME_TCM_RUNTIME}")
+    message(STATUS "IQ2_XXS TCM kernels enabled with ${IME_TCM_RUNTIME}")
+elseif(IME_ENABLE_TCM)
+    message(STATUS "IQ2_XXS TCM kernels disabled: set IME_TCM_RUNTIME to the fine_mm runtime library")
+else()
+    message(STATUS "IQ2_XXS TCM kernels disabled by IME_ENABLE_TCM=OFF")
+endif()
 
 target_include_directories(ime-kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
@@ -159,6 +210,9 @@ add_ime_assembly(kernels/q4_0-q8_0-RVV-upstream/kernel.cpp q4_0_q8_0_rvv_upstrea
 add_ime_assembly(kernels/q4_K-q8_K-RVV-group/kernel.cpp q4_K_q8_K_rvv_group NO_VLEN)
 add_ime_assembly(kernels/q4_K-q8_K-RVV-my/kernel.cpp q4_K_q8_K_rvv_my)
 add_ime_assembly(kernels/q4_K-q8_K-RVV-upstream/adapter.cpp q4_K_q8_K_rvv_upstream)
+add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp iq2_xxs_q8_K_rvv_my_br)
+add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp iq2_xxs_q8_K_rvv_my_ir)
+add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-upstream/kernel.cpp iq2_xxs_q8_K_rvv_upstream)
 add_ime_assembly(bench/main.cpp main)
 
 add_custom_target(assembly DEPENDS ${IME_ASM_OUTPUTS})

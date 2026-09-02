@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <string_view>
+#include <array>
 #include <vector>
 
 #include "adapter_common.h"
@@ -37,6 +38,11 @@ int main(int argc, char **argv) {
     adapters::register_q4_K_rvv_group();
     adapters::register_q4_K_rvv_my();
     adapters::register_q4_K_rvv_upstream();
+    adapters::register_iq2_xxs_rvv_my_br();
+    adapters::register_iq2_xxs_rvv_my_ir();
+    adapters::register_iq2_xxs_rvv_upstream();
+    adapters::register_iq2_xxs_rvv_my_br_tcm();
+    adapters::register_iq2_xxs_rvv_my_ir_tcm();
 
     BenchmarkRequest request;
     std::string_view selected = "all";
@@ -78,39 +84,45 @@ int main(int argc, char **argv) {
         return 2;
     }
 
-    for (const auto *kernel : kernels) {
-        if (kernel->quantization != kernels.front()->quantization) {
-            std::fprintf(stderr, "selected kernels use different quantization types; run them separately\n");
-            return 2;
-        }
-    }
-    const auto q4_0_owner = kernels.front()->quantization == QuantizationType::WeightQ4_0ActivationQ8_0
-                                ? std::variant<OwnedQ4_0Q8_0Input, OwnedQ4_KQ8_KInput>(create_input(kernels.front()->quantization, request))
-                                : std::variant<OwnedQ4_0Q8_0Input, OwnedQ4_KQ8_KInput>(create_q4_K_input(request));
-    const auto input = std::visit([](const auto &owner) { return owner.view(); }, q4_0_owner);
     bool failed = false;
-    for (const auto *kernel : kernels) {
-        const auto result = run_benchmark(*kernel, request, input);
-        std::printf("\n[%.*s] %.*s\n", static_cast<int>(kernel->id.size()), kernel->id.data(),
-                    static_cast<int>(kernel->name.size()), kernel->name.data());
-        if (result.skipped) {
-            std::printf("status: SKIP (%s)\n", result.message.c_str());
-            continue;
+    for (size_t type_index = 0; type_index < static_cast<size_t>(QuantizationType::Count); ++type_index) {
+        const auto type = static_cast<QuantizationType>(type_index);
+        bool has_kernel = false;
+        for (const auto *kernel : kernels) has_kernel |= kernel->quantization == type;
+        if (!has_kernel) continue;
+        const auto input_owner = create_input(type, request);
+        const auto input = std::visit([](const auto &owner) { return owner.view(); }, input_owner);
+        for (const auto *kernel : kernels) {
+            if (kernel->quantization != type) continue;
+            const auto result = run_benchmark(*kernel, request, input);
+            std::printf("\n[%.*s] %.*s\n", static_cast<int>(kernel->id.size()), kernel->id.data(),
+                        static_cast<int>(kernel->name.size()), kernel->name.data());
+            if (result.skipped) {
+                std::printf("status: SKIP (%s)\n", result.message.c_str());
+                continue;
+            }
+            if (result.verified) {
+                std::printf("error elements: %zu/%zu (%.6f%%)\n",
+                            result.error_elements, result.compared_elements,
+                            result.error_element_ratio * 100.0);
+            } else {
+                std::printf("error elements: unavailable (verification disabled or not completed)\n");
+            }
+            if (!result.message.empty()) {
+                std::printf("status: FAIL (%s), max_abs=%.6g, max_rel=%.6g\n", result.message.c_str(),
+                            result.max_absolute_error, result.max_relative_error);
+                failed = true;
+                continue;
+            }
+            std::printf("verify: %s, max_abs=%.6g, max_rel=%.6g\n",
+                        result.verified ? "PASS" : "disabled", result.max_absolute_error,
+                        result.max_relative_error);
+            std::printf("cycles: min=%llu median=%llu iterations=%zu samples=%zu\n", static_cast<unsigned long long>(result.min_cycles), static_cast<unsigned long long>(result.median_cycles),
+                        result.iterations, request.samples);
+            std::printf("performance: %.4f FMA/cycle, %.2f%% of 128 FMA/cycle\n",
+                        result.fma_per_cycle, result.utilization_percent);
+            std::printf("checksum: %.9g\n", result.checksum);
         }
-        if (!result.message.empty()) {
-            std::printf("status: FAIL (%s), max_abs=%.6g, max_rel=%.6g\n", result.message.c_str(),
-                        result.max_absolute_error, result.max_relative_error);
-            failed = true;
-            continue;
-        }
-        std::printf("verify: %s, max_abs=%.6g, max_rel=%.6g\n",
-                    result.verified ? "PASS" : "disabled", result.max_absolute_error,
-                    result.max_relative_error);
-        std::printf("cycles: min=%llu median=%llu iterations=%zu samples=%zu\n", static_cast<unsigned long long>(result.min_cycles), static_cast<unsigned long long>(result.median_cycles),
-                    result.iterations, request.samples);
-        std::printf("performance: %.4f FMA/cycle, %.2f%% of 128 FMA/cycle\n",
-                    result.fma_per_cycle, result.utilization_percent);
-        std::printf("checksum: %.9g\n", result.checksum);
     }
     return failed ? 1 : 0;
 }

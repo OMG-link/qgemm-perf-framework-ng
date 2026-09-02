@@ -4,6 +4,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <array>
+
+#include "iq2_xxs.h"
 
 namespace ime::bench::llama_reference {
 
@@ -140,41 +143,73 @@ float dot_q4_0_q8_0(std::span<const block_q4_0> weight, std::span<const block_q8
     return sum;
 }
 
-std::vector<float> compute(QuantizationType type, const BenchmarkInput &generic_input) {
-    if (type == QuantizationType::WeightQ4_KActivationQ8_K) {
-        const auto &input = std::get<Q4_KQ8_KInput>(generic_input);
-        const size_t blocks = input.k / QK_K;
-        std::vector<block_q8_K> a(input.m * blocks);
-        std::vector<float> out(input.m * input.n);
-        for (size_t m = 0; m < input.m; ++m)
-            quantize_row_q8_K(input.activation.data() + m * input.k, a.data() + m * blocks, input.k);
-        for (size_t m = 0; m < input.m; ++m)
-            for (size_t n = 0; n < input.n; ++n) {
-                float v = 0;
-                for (size_t b = 0; b < blocks; ++b)
-                    v += dot_q4_K_q8_K(input.weight[n * blocks + b], a[m * blocks + b]);
-                out[m * input.n + n] = v;
-            }
-        return out;
+float dot_iq2_xxs_q8_K(const block_iq2_xxs &weight, const block_q8_K &activation) {
+    const auto *packed = reinterpret_cast<const uint8_t *>(weight.qs);
+    int32_t sum = 0;
+    for (size_t subblock = 0; subblock < QK_K / 32; ++subblock) {
+        int8_t values[32];
+        int scale;
+        iq2_xxs::decode_subblock(packed + subblock * 8, values, scale);
+        int32_t subblock_sum = 0;
+        for (size_t i = 0; i < 32; ++i)
+            subblock_sum += values[i] * activation.qs[subblock * 32 + i];
+        sum += scale * subblock_sum;
     }
-    if (type != QuantizationType::WeightQ4_0ActivationQ8_0)
-        std::abort();
+    return 0.125f * GGML_FP16_TO_FP32(weight.d) * activation.d * sum;
+}
+
+namespace {
+
+std::vector<float> compute_q4_0(const BenchmarkInput &generic_input) {
     const auto &input = std::get<Q4_0Q8_0Input>(generic_input);
-    const size_t blocks_k = input.k / QK8_0;
-    std::vector<block_q8_0> quantized_a(input.m * blocks_k);
-    for (size_t m = 0; m < input.m; ++m) {
-        quantize_row_q8_0(input.activation.data() + m * input.k,
-                          quantized_a.data() + m * blocks_k, input.k);
-    }
+    const size_t blocks = input.k / QK8_0;
+    std::vector<block_q8_0> activation(input.m * blocks);
+    for (size_t m = 0; m < input.m; ++m)
+        quantize_row_q8_0(input.activation.data() + m * input.k, activation.data() + m * blocks, input.k);
     std::vector<float> output(input.m * input.n);
-    for (size_t m = 0; m < input.m; ++m) {
-        for (size_t n = 0; n < input.n; ++n) {
-            output[m * input.n + n] = dot_q4_0_q8_0(
-                input.weight.subspan(n * blocks_k, blocks_k),
-                std::span<const block_q8_0>(quantized_a).subspan(m * blocks_k, blocks_k));
-        }
-    }
+    for (size_t m = 0; m < input.m; ++m)
+        for (size_t n = 0; n < input.n; ++n)
+            output[m * input.n + n] = dot_q4_0_q8_0(input.weight.subspan(n * blocks, blocks),
+                                                     std::span<const block_q8_0>(activation).subspan(m * blocks, blocks));
     return output;
+}
+
+std::vector<float> compute_q4_K(const BenchmarkInput &generic_input) {
+    const auto &input = std::get<Q4_KQ8_KInput>(generic_input);
+    const size_t blocks = input.k / QK_K;
+    std::vector<block_q8_K> activation(input.m * blocks);
+    for (size_t m = 0; m < input.m; ++m)
+        quantize_row_q8_K(input.activation.data() + m * input.k, activation.data() + m * blocks, input.k);
+    std::vector<float> output(input.m * input.n);
+    for (size_t m = 0; m < input.m; ++m)
+        for (size_t n = 0; n < input.n; ++n)
+            for (size_t b = 0; b < blocks; ++b)
+                output[m * input.n + n] += dot_q4_K_q8_K(input.weight[n * blocks + b], activation[m * blocks + b]);
+    return output;
+}
+
+std::vector<float> compute_iq2_xxs(const BenchmarkInput &generic_input) {
+    const auto &input = std::get<IQ2_XXSQ8_KInput>(generic_input);
+    const size_t blocks = input.k / QK_K;
+    std::vector<block_q8_K> activation(input.m * blocks);
+    for (size_t m = 0; m < input.m; ++m)
+        quantize_row_q8_K(input.activation.data() + m * input.k, activation.data() + m * blocks, input.k);
+    std::vector<float> output(input.m * input.n);
+    for (size_t m = 0; m < input.m; ++m)
+        for (size_t n = 0; n < input.n; ++n)
+            for (size_t b = 0; b < blocks; ++b)
+                output[m * input.n + n] += dot_iq2_xxs_q8_K(input.weight[n * blocks + b], activation[m * blocks + b]);
+    return output;
+}
+
+using ReferenceComputer = std::vector<float> (*)(const BenchmarkInput &);
+constexpr std::array<ReferenceComputer, static_cast<size_t>(QuantizationType::Count)> computers = {
+    compute_q4_0, compute_q4_K, compute_iq2_xxs};
+
+} // namespace
+
+std::vector<float> compute(QuantizationType type, const BenchmarkInput &generic_input) {
+    return computers.at(static_cast<size_t>(type))(generic_input);
 }
 
 } // namespace ime::bench::llama_reference

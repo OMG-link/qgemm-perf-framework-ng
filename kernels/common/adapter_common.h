@@ -58,6 +58,11 @@ void register_q4_0_rvv_upstream();
 void register_q4_K_rvv_group();
 void register_q4_K_rvv_my();
 void register_q4_K_rvv_upstream();
+void register_iq2_xxs_rvv_my_br();
+void register_iq2_xxs_rvv_my_ir();
+void register_iq2_xxs_rvv_upstream();
+void register_iq2_xxs_rvv_my_br_tcm();
+void register_iq2_xxs_rvv_my_ir_tcm();
 
 } // namespace ime::bench::adapters
 

@@ -28,6 +28,8 @@ struct BenchmarkRequest {
 enum class QuantizationType {
     WeightQ4_0ActivationQ8_0,
     WeightQ4_KActivationQ8_K,
+    WeightIQ2_XXSActivationQ8_K,
+    Count,
 };
 
 struct Q4_0Q8_0Input {
@@ -46,7 +48,15 @@ struct Q4_KQ8_KInput {
     std::span<const block_q4_K> weight;
 };
 
-using BenchmarkInput = std::variant<Q4_0Q8_0Input, Q4_KQ8_KInput>;
+struct IQ2_XXSQ8_KInput {
+    size_t m = 0;
+    size_t n = 0;
+    size_t k = 0;
+    std::span<const float> activation;
+    std::span<const block_iq2_xxs> weight;
+};
+
+using BenchmarkInput = std::variant<Q4_0Q8_0Input, Q4_KQ8_KInput, IQ2_XXSQ8_KInput>;
 using KernelState = void *;
 
 struct ValidationResult {
