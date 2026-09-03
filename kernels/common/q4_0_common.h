@@ -50,9 +50,13 @@ bool initialize_q4_0_ime(const BenchmarkRequest &request,
         }
     } else {
         state.packed_a_m8.resize((request.m / 8) * state.blocks_k());
+        std::vector<block_q8_0> reference_q8(8 * state.blocks_k());
         for (size_t tile_m = 0; tile_m < request.m; tile_m += 8) {
             constexpr size_t m4_block_size = 4 * (sizeof(float) + QK8_0);
             std::vector<std::byte> packed_four_rows(state.blocks_k() * m4_block_size);
+            for (size_t row = 0; row < 8; ++row) {
+                llama_reference::quantize_row_q8_0(input->activation.data() + (tile_m + row) * request.k, reference_q8.data() + row * state.blocks_k(), request.k);
+            }
             for (size_t half = 0; half < 2; ++half) {
                 auto *packed = packed_four_rows.data();
                 sqnbitgemm_spacemit_ime::ime1::quantize_a_4row_i8(
@@ -62,6 +66,9 @@ bool initialize_q4_0_ime(const BenchmarkRequest &request,
                     const auto *source = packed + block * m4_block_size;
                     auto &destination = state.packed_a_m8[(tile_m / 8) * state.blocks_k() + block];
                     std::memcpy(destination.d + half * 4, source, 4 * sizeof(float));
+                    for (size_t row = 0; row < 4; ++row) {
+                        destination.d[half * 4 + row] = GGML_FP16_TO_FP32(reference_q8[(half * 4 + row) * state.blocks_k() + block].d);
+                    }
                     std::memcpy(destination.qs + half * 4 * QK8_0,
                                 source + 4 * sizeof(float), 4 * QK8_0);
                 }
