@@ -3,14 +3,14 @@
 ## Scope
 
 This experiment profiles the unmodified optimized binary for
-`m8-batch-reduction` at the representative shape:
+`q4_0-q8_0-IME-m8b` at the representative shape:
 
 ```text
 M = 480, N = 1536, K = 1536
 ```
 
 The goal is to identify the distribution of execution time inside the three
-source regions of `kernels/m8_batch_reduction/kernel.cpp` without inserting
+source regions of `kernels/q4_0-q8_0-IME-m8b/kernel.cpp` without inserting
 `rdcycle`, logging, or other measurement code into the kernel.
 
 ## Platform and build
@@ -50,7 +50,7 @@ The benchmark command used by the driver was equivalent to:
 
 ```bash
 build/ime-llama-bench \
-  --kernel m8-batch-reduction \
+  --kernel q4_0-q8_0-IME-m8b \
   --m 480 --n 1536 --k 1536 \
   --warmup 2 --samples 1 --iterations 20 --no-verify
 ```
@@ -108,7 +108,7 @@ Run three profiles and create a local artifact directory:
 ```bash
 python3 tools/ime_perf/ime_perf.py profile \
   --remote spacemit-k1 --cpu 0 \
-  --kernel m8-batch-reduction \
+  --kernel q4_0-q8_0-IME-m8b \
   --m 480 --n 1536 --k 1536 \
   --warmup 2 --samples 1 --iterations 20 \
   --repetitions 3 \

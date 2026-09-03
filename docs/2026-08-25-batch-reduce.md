@@ -2,7 +2,7 @@
 
 ## Scope
 
-This record measures the current `m4-batch-reduction` implementation after the
+This record measures the current `q4_0-q8_0-IME-m4b` implementation after the
 recent reduction-buffer and dead-code cleanup changes.
 
 Representative performance shape:
@@ -82,7 +82,7 @@ Correctness preflight:
 ```bash
 ./compile-and-test.sh build
 ./compile-and-test.sh run \
-  --kernel m4-batch-reduction --m 80 --n 160 --k 320 \
+  --kernel q4_0-q8_0-IME-m4b --m 80 --n 160 --k 320 \
   --warmup 3 --samples 3 --iterations 3
 ```
 
@@ -90,7 +90,7 @@ Performance:
 
 ```bash
 ./compile-and-test.sh run \
-  --kernel m4-batch-reduction --m 480 --n 1536 --k 1536 \
+  --kernel q4_0-q8_0-IME-m4b --m 480 --n 1536 --k 1536 \
   --warmup 3 --samples 10 --iterations 3 --no-verify
 ```
 
@@ -98,7 +98,7 @@ Performance:
 
 ### Correctness preflight
 
-The current `m8-batch-reduction` binary was checked against the local llama.cpp
+The current `q4_0-q8_0-IME-m8b` binary was checked against the local llama.cpp
 reference before the performance runs:
 
 ```text
@@ -152,7 +152,7 @@ Correctness preflight:
 ```bash
 ./compile-and-test.sh build
 ./compile-and-test.sh run \
-  --kernel m8-batch-reduction --m 80 --n 160 --k 320 \
+  --kernel q4_0-q8_0-IME-m8b --m 80 --n 160 --k 320 \
   --warmup 3 --samples 3 --iterations 3
 ```
 
@@ -160,7 +160,7 @@ Performance:
 
 ```bash
 ./compile-and-test.sh run \
-  --kernel m8-batch-reduction --m 480 --n 1536 --k 1536 \
+  --kernel q4_0-q8_0-IME-m8b --m 480 --n 1536 --k 1536 \
   --warmup 3 --samples 10 --iterations 3 --no-verify
 ```
 

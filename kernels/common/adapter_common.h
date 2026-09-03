@@ -48,10 +48,10 @@ ExportResult export_common(KernelState state, std::span<float> output);
 double checksum_common(KernelState state);
 void destroy_common(KernelState state) noexcept;
 
-void register_llama_dispatch();
-void register_m4_batch_reduction();
-void register_m4_immediate_reduction();
-void register_m8_batch_reduction();
+void register_q4_0_ime_upstream();
+void register_q4_0_ime_m4b();
+void register_q4_0_ime_m4i();
+void register_q4_0_ime_m8b();
 void register_q4_0_rvv_group();
 void register_q4_0_rvv_my();
 void register_q4_0_rvv_upstream();

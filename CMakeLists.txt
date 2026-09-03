@@ -33,15 +33,15 @@ target_compile_options(ime_compile_options INTERFACE
 add_library(ime-kernels STATIC
     kernels/common/adapter_common.cpp
     kernels/common/iq2_xxs_adapter.cpp
-    kernels/llama_dispatch/wrapper.cpp
-    kernels/llama_dispatch/ime1_kernels.cpp
-    kernels/llama_dispatch/adapter.cpp
-    kernels/m4_batch_reduction/kernel.cpp
-    kernels/m4_batch_reduction/adapter.cpp
-    kernels/m4_immediate_reduction/kernel.cpp
-    kernels/m4_immediate_reduction/adapter.cpp
-    kernels/m8_batch_reduction/kernel.cpp
-    kernels/m8_batch_reduction/adapter.cpp
+    kernels/q4_0-q8_0-IME-upstream/wrapper.cpp
+    kernels/q4_0-q8_0-IME-upstream/ime1_kernels.cpp
+    kernels/q4_0-q8_0-IME-upstream/adapter.cpp
+    kernels/q4_0-q8_0-IME-m4b/kernel.cpp
+    kernels/q4_0-q8_0-IME-m4b/adapter.cpp
+    kernels/q4_0-q8_0-IME-m4i/kernel.cpp
+    kernels/q4_0-q8_0-IME-m4i/adapter.cpp
+    kernels/q4_0-q8_0-IME-m8b/kernel.cpp
+    kernels/q4_0-q8_0-IME-m8b/adapter.cpp
     kernels/q4_0-q8_0-RVV-my/kernel.cpp
     kernels/q4_0-q8_0-RVV-my/adapter.cpp
     kernels/q4_0-q8_0-RVV-upstream/kernel.cpp
@@ -151,9 +151,9 @@ target_link_libraries(ime-kernels PRIVATE ime_compile_options)
 target_compile_options(ime-kernels PRIVATE -Wall -Wextra)
 
 set_source_files_properties(
-    kernels/m4_batch_reduction/kernel.cpp
-    kernels/m4_immediate_reduction/kernel.cpp
-    kernels/m8_batch_reduction/kernel.cpp
+    kernels/q4_0-q8_0-IME-m4b/kernel.cpp
+    kernels/q4_0-q8_0-IME-m4i/kernel.cpp
+    kernels/q4_0-q8_0-IME-m8b/kernel.cpp
     PROPERTIES COMPILE_OPTIONS
     "-Wno-unused-parameter;-Wno-unused-variable;-Wno-unused-but-set-variable"
 )
@@ -209,10 +209,10 @@ function(add_ime_assembly source stem)
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/types.h
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/ime1_dispatch.h
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/rvv_vl.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/llama_dispatch/wrapper.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/m4_batch_reduction/kernel.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/m4_immediate_reduction/kernel.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/m8_batch_reduction/kernel.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-upstream/wrapper.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-m4b/kernel.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-m4i/kernel.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-m8b/kernel.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/perf.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/timer.hpp
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/gemm.h
@@ -223,11 +223,11 @@ function(add_ime_assembly source stem)
     set(IME_ASM_OUTPUTS ${IME_ASM_OUTPUTS} ${output} PARENT_SCOPE)
 endfunction()
 
-add_ime_assembly(kernels/llama_dispatch/wrapper.cpp llama_dispatch_wrapper)
-add_ime_assembly(kernels/llama_dispatch/ime1_kernels.cpp llama_dispatch_kernels)
-add_ime_assembly(kernels/m4_batch_reduction/kernel.cpp m4_batch_reduction)
-add_ime_assembly(kernels/m4_immediate_reduction/kernel.cpp m4_immediate_reduction)
-add_ime_assembly(kernels/m8_batch_reduction/kernel.cpp m8_batch_reduction)
+add_ime_assembly(kernels/q4_0-q8_0-IME-upstream/wrapper.cpp q4_0_q8_0_ime_upstream_wrapper)
+add_ime_assembly(kernels/q4_0-q8_0-IME-upstream/ime1_kernels.cpp q4_0_q8_0_ime_upstream_kernels)
+add_ime_assembly(kernels/q4_0-q8_0-IME-m4b/kernel.cpp q4_0_q8_0_ime_m4b)
+add_ime_assembly(kernels/q4_0-q8_0-IME-m4i/kernel.cpp q4_0_q8_0_ime_m4i)
+add_ime_assembly(kernels/q4_0-q8_0-IME-m8b/kernel.cpp q4_0_q8_0_ime_m8b)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-group/kernel.cpp q4_0_q8_0_rvv_group NO_VLEN)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-my/kernel.cpp q4_0_q8_0_rvv_my)
 add_ime_assembly(kernels/q4_0-q8_0-RVV-upstream/kernel.cpp q4_0_q8_0_rvv_upstream)

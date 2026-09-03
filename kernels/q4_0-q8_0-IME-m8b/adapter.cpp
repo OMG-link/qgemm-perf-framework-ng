@@ -38,10 +38,10 @@ void destroy(KernelState state) noexcept { delete static_cast<M8State *>(state);
 
 } // namespace
 
-void register_m8_batch_reduction() {
+void register_q4_0_ime_m8b() {
     register_kernel({
-        .id = "m8-batch-reduction",
-        .name = "M8 delayed batch reduction",
+        .id = "q4_0-q8_0-IME-m8b",
+        .name = "Q4_0 x Q8_0 IME M8 batch reduction",
         .quantization = QuantizationType::WeightQ4_0ActivationQ8_0,
         .callbacks = {validate_shape<8, 16, 32>, prepare, reset_common, run,
                       export_common, checksum_common, destroy},

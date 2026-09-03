@@ -16,6 +16,9 @@ reviewable and can be adapted to a benchmark adapter independently.
 | `iq2_xxs-q8_K-RVV-my-ir` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K` | pre-decompressed weights |
 | `*-RVV-upstream` | llama.cpp `ggml/src/ggml-cpu/arch/riscv/quants.c` | dependency-free extracts of the upstream q4_0, q4_K, and iq2_xxs RVV dot kernels; see each directory's provenance |
 | `q4_0-q8_0-IME-upstream` | llama.cpp `ggml/src/ggml-cpu/spacemit/ime1_kernels.cpp` | IME i8 x i4 path; supporting headers included |
+| `q4_0-q8_0-IME-m4i` | `kernel.cpp`, `SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin` | 4x16 immediate reduction kernel |
+| `q4_0-q8_0-IME-m4b` | `kernel.cpp`, `SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed` | 4x16 batch reduction kernel |
+| `q4_0-q8_0-IME-m8b` | `kernel.cpp`, `SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed` | 8x16 batch reduction kernel |
 
 The regular and TCM IQ2_XXS variants share the same `kernel.cpp` in each of
 the `iq2_xxs-q8_K-RVV-my-br` and `iq2_xxs-q8_K-RVV-my-ir` directories. CMake

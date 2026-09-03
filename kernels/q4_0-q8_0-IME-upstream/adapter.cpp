@@ -35,10 +35,10 @@ void run(KernelState opaque, size_t iterations) noexcept {
 
 } // namespace
 
-void register_llama_dispatch() {
+void register_q4_0_ime_upstream() {
     register_kernel({
-        .id = "llama-dispatch",
-        .name = "llama.cpp IME dispatcher",
+        .id = "q4_0-q8_0-IME-upstream",
+        .name = "Q4_0 x Q8_0 IME upstream",
         .quantization = QuantizationType::WeightQ4_0ActivationQ8_0,
         .callbacks = {validate_shape<4, 16, 32>, prepare, reset_common, run,
                       export_common, checksum_common, destroy_common},

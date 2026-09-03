@@ -2,7 +2,7 @@
 
 ## Scope
 
-This record measures the `m4-immediate-reduction` implementation after the
+This record measures the `q4_0-q8_0-IME-m4i` implementation after the
 intrinsic kernel cleanup and integration into the benchmark framework.
 
 Representative performance shape:
@@ -96,7 +96,7 @@ Correctness preflight:
 ```bash
 ./compile-and-test.sh build
 ./compile-and-test.sh run \
-  --kernel m4-immediate-reduction --m 80 --n 160 --k 320 \
+  --kernel q4_0-q8_0-IME-m4i --m 80 --n 160 --k 320 \
   --warmup 3 --samples 3 --iterations 3
 ```
 
@@ -104,7 +104,7 @@ Performance run:
 
 ```bash
 ./compile-and-test.sh run \
-  --kernel m4-immediate-reduction --m 480 --n 1536 --k 1536 \
+  --kernel q4_0-q8_0-IME-m4i --m 480 --n 1536 --k 1536 \
   --warmup 3 --samples 10 --iterations 3 --no-verify
 ```
 

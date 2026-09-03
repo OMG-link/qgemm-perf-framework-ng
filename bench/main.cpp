@@ -28,10 +28,10 @@ void usage(const char *program) {
 
 int main(int argc, char **argv) {
     using namespace ime::bench;
-    adapters::register_llama_dispatch();
-    adapters::register_m4_batch_reduction();
-    adapters::register_m4_immediate_reduction();
-    adapters::register_m8_batch_reduction();
+    adapters::register_q4_0_ime_upstream();
+    adapters::register_q4_0_ime_m4b();
+    adapters::register_q4_0_ime_m4i();
+    adapters::register_q4_0_ime_m8b();
     adapters::register_q4_0_rvv_group();
     adapters::register_q4_0_rvv_my();
     adapters::register_q4_0_rvv_upstream();
