@@ -14,7 +14,7 @@ reviewable and can be adapted to a benchmark adapter independently.
 | `q4_0-q8_0-RVV-my` | triton-cpu commit `94fd845b386a0be8bd67baa76d06c47d81eaf6fb`, `ggml_gemm_q4_0_8x32_q8_0` | 8x32 kernel |
 | `iq2_xxs-q8_K-RVV-my-br` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K` | on-the-fly decompression |
 | `iq2_xxs-q8_K-RVV-my-ir` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K` | pre-decompressed weights |
-| `*-RVV-upstream` | llama.cpp `ggml/src/ggml-cpu/arch/riscv/quants.c` | contains the upstream q4_0, q4_K, and iq2_xxs RVV dot kernels |
+| `*-RVV-upstream` | llama.cpp `ggml/src/ggml-cpu/arch/riscv/quants.c` | dependency-free extracts of the upstream q4_0, q4_K, and iq2_xxs RVV dot kernels; see each directory's provenance |
 | `q4_0-q8_0-IME-upstream` | llama.cpp `ggml/src/ggml-cpu/spacemit/ime1_kernels.cpp` | IME i8 x i4 path; supporting headers included |
 
 The regular and TCM IQ2_XXS variants share the same `kernel.cpp` in each of
@@ -25,8 +25,7 @@ defines `USE_TCM` for the TCM object targets and supplies the shared
 directories; CMake still gives them their distinct exported symbols and
 benchmark IDs.
 
-The upstream imports are source archives, not yet registered benchmark kernels:
-they depend on llama.cpp's internal `ggml-common.h`, quantization headers, and
-build macros. Likewise, the standalone imported GEMMs use their original
-`ggml_def.h`/`gemm.h` layouts. This avoids silently changing correctness while
-bringing the kernels into the framework for subsequent ABI-specific adapters.
+The registered upstream RVV kernels are local, dependency-free extracts rather
+than complete copies of llama.cpp's `quants.c`. The standalone imported GEMMs
+retain their original `ggml_def.h`/`gemm.h` layouts so their ABI assumptions
+remain reviewable.
