@@ -30,62 +30,152 @@ target_compile_options(ime_compile_options INTERFACE
     "SHELL:-mllvm -riscv-v-vector-bits-max=256"
 )
 
-add_library(ime-kernels STATIC
-    kernels/common/adapter_common.cpp
-    kernels/common/iq2_xxs_adapter.cpp
-    kernels/q4_0-q8_0-IME-upstream/wrapper.cpp
-    kernels/q4_0-q8_0-IME-upstream/ime1_kernels.cpp
-    kernels/q4_0-q8_0-IME-upstream/adapter.cpp
-    kernels/q4_0-q8_0-IME-m4b/kernel.cpp
-    kernels/q4_0-q8_0-IME-m4b/adapter.cpp
-    kernels/q4_0-q8_0-IME-m4i/kernel.cpp
-    kernels/q4_0-q8_0-IME-m4i/adapter.cpp
-    kernels/q4_0-q8_0-IME-m8b/kernel.cpp
-    kernels/q4_0-q8_0-IME-m8b/adapter.cpp
-    kernels/q4_0-q8_0-RVV-my/kernel.cpp
-    kernels/q4_0-q8_0-RVV-my/adapter.cpp
-    kernels/q4_0-q8_0-RVV-upstream/kernel.cpp
-    kernels/q4_0-q8_0-RVV-upstream/adapter.cpp
-    kernels/q4_K-q8_K-RVV-group/adapter.cpp
-    kernels/q4_K-q8_K-RVV-my/kernel.cpp
-    kernels/q4_K-q8_K-RVV-my/adapter.cpp
-    kernels/q4_K-q8_K-RVV-upstream/kernel.cpp
-    kernels/q4_K-q8_K-RVV-upstream/adapter.cpp
-    kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp
-    kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp
-    kernels/iq2_xxs-q8_K-RVV-upstream/kernel.cpp
-    $<TARGET_OBJECTS:q4_K_rvv_group_objects>
-    $<TARGET_OBJECTS:q4_0_rvv_group_objects>
+set(IME_KERNEL_DEFAULT_COMPILE_OPTIONS
+    -Wall
+    -Wextra
+    -mllvm
+    -riscv-v-vector-bits-min=256
+    -mllvm
+    -riscv-v-vector-bits-max=256
+)
+set(IME_ASSEMBLY_DEFAULT_COMPILE_OPTIONS
+    -O3
+    -mllvm
+    -riscv-v-vector-bits-min=256
+    -mllvm
+    -riscv-v-vector-bits-max=256
 )
 
-add_library(q4_0_rvv_group_objects OBJECT
-    kernels/q4_0-q8_0-RVV-group/kernel.cpp
-    kernels/q4_0-q8_0-RVV-group/adapter.cpp
-)
-target_include_directories(q4_0_rvv_group_objects PRIVATE
+add_library(ime-kernels STATIC)
+target_include_directories(ime-kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
     ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
 )
-target_link_libraries(q4_0_rvv_group_objects PRIVATE ime_base_compile_options)
-target_compile_options(q4_0_rvv_group_objects PRIVATE -Wall -Wextra)
+target_link_libraries(ime-kernels PRIVATE ime_base_compile_options)
 
-add_library(q4_K_rvv_group_objects OBJECT kernels/q4_K-q8_K-RVV-group/kernel.cpp)
-target_include_directories(q4_K_rvv_group_objects PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-group
-    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
-)
-target_link_libraries(q4_K_rvv_group_objects PRIVATE ime_base_compile_options)
-target_compile_options(q4_K_rvv_group_objects PRIVATE -Wall -Wextra)
+function(ime_resolve_sources output)
+    set(resolved)
+    foreach(source IN LISTS ARGN)
+        if(IS_ABSOLUTE "${source}")
+            list(APPEND resolved "${source}")
+        else()
+            list(APPEND resolved "${CMAKE_CURRENT_SOURCE_DIR}/${source}")
+        endif()
+    endforeach()
+    set(${output} "${resolved}" PARENT_SCOPE)
+endfunction()
 
-function(add_iq2_xxs_tcm_object target source)
-    add_library(${target} OBJECT ${source})
+function(ime_apply_default_options output defaults removals additions)
+    set(options ${defaults})
+    foreach(option IN LISTS removals)
+        list(REMOVE_ITEM options "${option}")
+    endforeach()
+    list(APPEND options ${additions})
+    set(${output} "${options}" PARENT_SCOPE)
+endfunction()
+
+function(ime_add_kernel_sources)
+    cmake_parse_arguments(ARG "" "" "SOURCES;COMPILE_OPTIONS;REMOVE_COMPILE_OPTIONS;COMPILE_DEFINITIONS" ${ARGN})
+    if(NOT ARG_SOURCES)
+        message(FATAL_ERROR "ime_add_kernel_sources requires SOURCES")
+    endif()
+    ime_resolve_sources(sources ${ARG_SOURCES})
+    ime_apply_default_options(options
+        "${IME_KERNEL_DEFAULT_COMPILE_OPTIONS}"
+        "${ARG_REMOVE_COMPILE_OPTIONS}"
+        "${ARG_COMPILE_OPTIONS}")
+    target_sources(ime-kernels PRIVATE ${sources})
+    set_property(SOURCE ${sources} TARGET_DIRECTORY ime-kernels
+                 PROPERTY COMPILE_OPTIONS ${options})
+    if(ARG_COMPILE_DEFINITIONS)
+        set_property(SOURCE ${sources} TARGET_DIRECTORY ime-kernels
+                     PROPERTY COMPILE_DEFINITIONS ${ARG_COMPILE_DEFINITIONS})
+    endif()
+endfunction()
+
+function(ime_add_kernel_object target)
+    cmake_parse_arguments(ARG "" "" "SOURCES;INCLUDE_DIRECTORIES;COMPILE_OPTIONS;REMOVE_COMPILE_OPTIONS;COMPILE_DEFINITIONS" ${ARGN})
+    if(NOT ARG_SOURCES)
+        message(FATAL_ERROR "ime_add_kernel_object requires SOURCES")
+    endif()
+    ime_resolve_sources(sources ${ARG_SOURCES})
+    ime_apply_default_options(options
+        "${IME_KERNEL_DEFAULT_COMPILE_OPTIONS}"
+        "${ARG_REMOVE_COMPILE_OPTIONS}"
+        "${ARG_COMPILE_OPTIONS}")
+    add_library(${target} OBJECT ${sources})
     target_include_directories(${target} PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
+        ${CMAKE_SOURCE_DIR}/bench/framework
+        ${CMAKE_SOURCE_DIR}/bench/llama_reference
+        ${CMAKE_SOURCE_DIR}/kernels/common
+        ${ARG_INCLUDE_DIRECTORIES}
     )
-    target_link_libraries(${target} PRIVATE ime_compile_options)
-    target_compile_definitions(${target} PRIVATE USE_TCM)
-    target_compile_options(${target} PRIVATE -Wall -Wextra)
+    target_link_libraries(${target} PRIVATE ime_base_compile_options)
+    set_property(SOURCE ${sources} TARGET_DIRECTORY ${target}
+                 PROPERTY COMPILE_OPTIONS ${options})
+    if(ARG_COMPILE_DEFINITIONS)
+        target_compile_definitions(${target} PRIVATE ${ARG_COMPILE_DEFINITIONS})
+    endif()
+    target_sources(ime-kernels PRIVATE $<TARGET_OBJECTS:${target}>)
+endfunction()
+
+set(IME_ASM_DIR ${CMAKE_CURRENT_BINARY_DIR}/asm)
+set_property(GLOBAL PROPERTY IME_ASM_TARGETS "")
+function(add_ime_assembly source stem)
+    cmake_parse_arguments(ARG "" "" "DEPENDS;COMPILE_OPTIONS;REMOVE_COMPILE_OPTIONS;COMPILE_DEFINITIONS;INCLUDE_DIRECTORIES" ${ARGN})
+    ime_resolve_sources(sources "${source}")
+    list(GET sources 0 source_path)
+    ime_resolve_sources(dependencies ${ARG_DEPENDS})
+    ime_apply_default_options(options
+        "${IME_ASSEMBLY_DEFAULT_COMPILE_OPTIONS}"
+        "${ARG_REMOVE_COMPILE_OPTIONS}"
+        "${ARG_COMPILE_OPTIONS}")
+    set(definitions)
+    foreach(definition IN LISTS ARG_COMPILE_DEFINITIONS)
+        list(APPEND definitions "-D${definition}")
+    endforeach()
+    set(include_directories)
+    foreach(directory IN LISTS ARG_INCLUDE_DIRECTORIES)
+        list(APPEND include_directories "-I${directory}")
+    endforeach()
+    set(output ${IME_ASM_DIR}/${stem}.s)
+    add_custom_command(
+        OUTPUT ${output}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${IME_ASM_DIR}
+        COMMAND ${CMAKE_CXX_COMPILER}
+            -std=c++20
+            -DSPACEMIT_X60
+            ${definitions}
+            -march=${IME_ARCH}
+            -mtune=${IME_TUNE}
+            -mllvm --misched-cluster=false
+            ${options}
+            -I${CMAKE_SOURCE_DIR}/include
+            -I${CMAKE_SOURCE_DIR}/bench
+            -I${CMAKE_SOURCE_DIR}/bench/framework
+            -I${CMAKE_SOURCE_DIR}/bench/llama_reference
+            -I${CMAKE_SOURCE_DIR}/kernels/common
+            -I${CMAKE_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
+            ${include_directories}
+            -S ${source_path}
+            -o ${output}
+        DEPENDS
+            ${source_path}
+            ${dependencies}
+            ${CMAKE_SOURCE_DIR}/include/ggml.h
+            ${CMAKE_SOURCE_DIR}/kernels/common/types.h
+            ${CMAKE_SOURCE_DIR}/kernels/common/ime1_dispatch.h
+            ${CMAKE_SOURCE_DIR}/kernels/common/rvv_vl.h
+            ${CMAKE_SOURCE_DIR}/bench/perf.h
+            ${CMAKE_SOURCE_DIR}/bench/timer.hpp
+        VERBATIM
+        COMMENT "Generating ${output}"
+    )
+    set(assembly_target ime_asm_${stem})
+    add_custom_target(${assembly_target} DEPENDS ${output})
+    set_property(GLOBAL APPEND PROPERTY IME_ASM_TARGETS ${assembly_target})
 endfunction()
 
 option(IME_ENABLE_TCM "Build IQ2_XXS kernels that use the fine_mm TCM allocator" ON)
@@ -100,22 +190,14 @@ if(IME_ENABLE_TCM AND IME_TCM_RUNTIME)
     if(NOT EXISTS "${IME_TCM_RUNTIME}")
         message(FATAL_ERROR "IME_TCM_RUNTIME does not exist: ${IME_TCM_RUNTIME}")
     endif()
-    add_iq2_xxs_tcm_object(iq2_xxs_rvv_br_tcm_objects
-                           ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp)
-    add_iq2_xxs_tcm_object(iq2_xxs_rvv_ir_tcm_objects
-                           ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp)
-    target_compile_definitions(iq2_xxs_rvv_br_tcm_objects PRIVATE
-        ggml_gemm_iq2_xxs_q8_K_br=ggml_gemm_iq2_xxs_q8_K_br_tcm
-        pack_a_iq2_xxs_br=pack_a_iq2_xxs_br_tcm
-    )
-    target_compile_definitions(iq2_xxs_rvv_ir_tcm_objects PRIVATE
-        ggml_gemm_iq2_xxs_q8_K_ir=ggml_gemm_iq2_xxs_q8_K_ir_tcm
-        pack_a_iq2_xxs_ir=pack_a_iq2_xxs_ir_tcm
-    )
-    target_sources(ime-kernels PRIVATE
-        $<TARGET_OBJECTS:iq2_xxs_rvv_br_tcm_objects>
-        $<TARGET_OBJECTS:iq2_xxs_rvv_ir_tcm_objects>
-    )
+    set(IME_HAVE_TCM ON)
+else()
+    set(IME_HAVE_TCM OFF)
+endif()
+
+add_subdirectory(kernels)
+
+if(IME_HAVE_TCM)
     target_compile_definitions(ime-kernels PRIVATE IME_HAVE_TCM)
     target_link_libraries(ime-kernels PUBLIC "${IME_TCM_RUNTIME}")
     message(STATUS "IQ2_XXS TCM kernels enabled with ${IME_TCM_RUNTIME}")
@@ -124,23 +206,6 @@ elseif(IME_ENABLE_TCM)
 else()
     message(STATUS "IQ2_XXS TCM kernels disabled by IME_ENABLE_TCM=OFF")
 endif()
-
-target_include_directories(ime-kernels PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
-    ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
-    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
-    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
-)
-target_link_libraries(ime-kernels PRIVATE ime_compile_options)
-target_compile_options(ime-kernels PRIVATE -Wall -Wextra)
-
-set_source_files_properties(
-    kernels/q4_0-q8_0-IME-m4b/kernel.cpp
-    kernels/q4_0-q8_0-IME-m4i/kernel.cpp
-    kernels/q4_0-q8_0-IME-m8b/kernel.cpp
-    PROPERTIES COMPILE_OPTIONS
-    "-Wno-unused-parameter;-Wno-unused-variable;-Wno-unused-but-set-variable"
-)
 
 add_executable(ime-llama-bench
     bench/main.cpp
@@ -157,70 +222,7 @@ target_include_directories(ime-llama-bench PRIVATE
 target_link_libraries(ime-llama-bench PRIVATE ime_compile_options ime-kernels)
 target_compile_options(ime-llama-bench PRIVATE -Wall -Wextra)
 
-set(IME_ASM_DIR ${CMAKE_CURRENT_BINARY_DIR}/asm)
-set(IME_ASM_OUTPUTS)
-function(add_ime_assembly source stem)
-    set(output ${IME_ASM_DIR}/${stem}.s)
-    set(IME_ASM_VLEN_OPTIONS
-        -mllvm -riscv-v-vector-bits-min=256
-        -mllvm -riscv-v-vector-bits-max=256
-    )
-    if(ARGC GREATER 2 AND ARGV2 STREQUAL "NO_VLEN")
-        set(IME_ASM_VLEN_OPTIONS)
-    endif()
-    add_custom_command(
-        OUTPUT ${output}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${IME_ASM_DIR}
-        COMMAND ${CMAKE_CXX_COMPILER}
-            -std=c++20
-            -DSPACEMIT_X60
-            -march=${IME_ARCH}
-            -mtune=${IME_TUNE}
-            ${IME_ASM_VLEN_OPTIONS}
-            -mllvm --misched-cluster=false
-            -O3
-            -I${CMAKE_CURRENT_SOURCE_DIR}/include
-            -I${CMAKE_CURRENT_SOURCE_DIR}/bench
-            -I${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
-            -I${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
-            -I${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
-            -I${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
-            -S ${CMAKE_CURRENT_SOURCE_DIR}/${source}
-            -o ${output}
-        DEPENDS
-            ${CMAKE_CURRENT_SOURCE_DIR}/${source}
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/ggml.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/types.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/ime1_dispatch.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/rvv_vl.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-upstream/wrapper.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-m4b/kernel.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-m4i/kernel.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_0-q8_0-IME-m8b/kernel.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/bench/perf.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/bench/timer.hpp
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/gemm.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/ggml_min.h
-        VERBATIM
-        COMMENT "Generating ${output}"
-    )
-    set(IME_ASM_OUTPUTS ${IME_ASM_OUTPUTS} ${output} PARENT_SCOPE)
-endfunction()
-
-add_ime_assembly(kernels/q4_0-q8_0-IME-upstream/wrapper.cpp q4_0_q8_0_ime_upstream_wrapper)
-add_ime_assembly(kernels/q4_0-q8_0-IME-upstream/ime1_kernels.cpp q4_0_q8_0_ime_upstream_kernels)
-add_ime_assembly(kernels/q4_0-q8_0-IME-m4b/kernel.cpp q4_0_q8_0_ime_m4b)
-add_ime_assembly(kernels/q4_0-q8_0-IME-m4i/kernel.cpp q4_0_q8_0_ime_m4i)
-add_ime_assembly(kernels/q4_0-q8_0-IME-m8b/kernel.cpp q4_0_q8_0_ime_m8b)
-add_ime_assembly(kernels/q4_0-q8_0-RVV-group/kernel.cpp q4_0_q8_0_rvv_group NO_VLEN)
-add_ime_assembly(kernels/q4_0-q8_0-RVV-my/kernel.cpp q4_0_q8_0_rvv_my)
-add_ime_assembly(kernels/q4_0-q8_0-RVV-upstream/kernel.cpp q4_0_q8_0_rvv_upstream)
-add_ime_assembly(kernels/q4_K-q8_K-RVV-group/kernel.cpp q4_K_q8_K_rvv_group NO_VLEN)
-add_ime_assembly(kernels/q4_K-q8_K-RVV-my/kernel.cpp q4_K_q8_K_rvv_my)
-add_ime_assembly(kernels/q4_K-q8_K-RVV-upstream/kernel.cpp q4_K_q8_K_rvv_upstream)
-add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp iq2_xxs_q8_K_rvv_my_br)
-add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp iq2_xxs_q8_K_rvv_my_ir)
-add_ime_assembly(kernels/iq2_xxs-q8_K-RVV-upstream/kernel.cpp iq2_xxs_q8_K_rvv_upstream)
 add_ime_assembly(bench/main.cpp main)
-
-add_custom_target(assembly DEPENDS ${IME_ASM_OUTPUTS})
+get_property(IME_ASM_TARGETS GLOBAL PROPERTY IME_ASM_TARGETS)
+add_custom_target(assembly)
+add_dependencies(assembly ${IME_ASM_TARGETS})

@@ -28,6 +28,15 @@ defines `USE_TCM` for the TCM object targets and supplies the shared
 directories; CMake still gives them their distinct exported symbols and
 benchmark IDs.
 
+Each kernel directory owns its source and assembly registration in a local
+`CMakeLists.txt`. `ime_add_kernel_sources()` and `ime_add_kernel_object()` apply
+the root project's default kernel options. A directory can extend them with
+`COMPILE_OPTIONS` or remove exact default option tokens with
+`REMOVE_COMPILE_OPTIONS`. `add_ime_assembly()` provides the same controls for
+assembly generation. The grouped q4_0 and q4_K kernels use this mechanism to
+remove the default fixed 256-bit vector-length options, while the IQ2_XXS
+directories use local object targets for their additional `USE_TCM` builds.
+
 The registered upstream RVV kernels are local, dependency-free extracts rather
 than complete copies of llama.cpp's `quants.c`. Standard GGML block definitions
 live in `include/ggml.h`; custom packed kernel layouts live in
