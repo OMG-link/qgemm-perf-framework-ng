@@ -52,6 +52,7 @@ void register_q4_0_ime_upstream();
 void register_q4_0_ime_m4b();
 void register_q4_0_ime_m4i();
 void register_q4_0_ime_m8b();
+void register_q4_0_ime_m32n4();
 void register_q4_0_rvv_group();
 void register_q4_0_rvv_my();
 void register_q4_0_rvv_upstream();

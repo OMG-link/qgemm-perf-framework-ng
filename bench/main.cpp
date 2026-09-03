@@ -32,6 +32,7 @@ int main(int argc, char **argv) {
     adapters::register_q4_0_ime_m4b();
     adapters::register_q4_0_ime_m4i();
     adapters::register_q4_0_ime_m8b();
+    adapters::register_q4_0_ime_m32n4();
     adapters::register_q4_0_rvv_group();
     adapters::register_q4_0_rvv_my();
     adapters::register_q4_0_rvv_upstream();
