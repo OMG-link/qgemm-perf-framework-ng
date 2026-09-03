@@ -2,7 +2,7 @@
 #include <riscv_vector.h>
 // #include "riscv_subt.h"
 
-void ggml_gemm_q4_K_8x32_q8_K(int n, float *GGML_RESTRICT s, size_t bs, const void *GGML_RESTRICT vx, const void *GGML_RESTRICT vy, int nr, int nc) {
+void ggml_gemm_q4_K_8x32_q8_K_group(int n, float *GGML_RESTRICT s, size_t bs, const void *GGML_RESTRICT vx, const void *GGML_RESTRICT vy, int nr, int nc) {
     const int qk = QK_K;
     const int nb = n / qk;
     const int ncols_interleaved = 8;

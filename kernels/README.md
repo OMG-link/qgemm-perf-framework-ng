@@ -12,8 +12,8 @@ reviewable and can be adapted to a benchmark adapter independently.
 | `q4_K-q8_K-RVV-my` | `kernel.cpp`, `ggml_gemm_q4_K_8x32_q8_K` | 12x32 kernel |
 | `q4_0-q8_0-RVV-group` | triton-cpu commit `45018883019239550daf638222fb23588d203d47`, `ggml_gemm_q4_0_12x32_q8_0` | 12x32 kernel |
 | `q4_0-q8_0-RVV-my` | triton-cpu commit `94fd845b386a0be8bd67baa76d06c47d81eaf6fb`, `ggml_gemm_q4_0_8x32_q8_0` | 8x32 kernel |
-| `iq2_xxs-q8_K-RVV-my-br` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K` | on-the-fly decompression |
-| `iq2_xxs-q8_K-RVV-my-ir` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K` | pre-decompressed weights |
+| `iq2_xxs-q8_K-RVV-my-br` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K_br` | on-the-fly decompression |
+| `iq2_xxs-q8_K-RVV-my-ir` | `kernel.cpp`, `ggml_gemm_iq2_xxs_q8_K_ir` | pre-decompressed weights |
 | `*-RVV-upstream` | llama.cpp `ggml/src/ggml-cpu/arch/riscv/quants.c` | dependency-free extracts of the upstream q4_0, q4_K, and iq2_xxs RVV dot kernels; see each directory's provenance |
 | `q4_0-q8_0-IME-upstream` | llama.cpp `ggml/src/ggml-cpu/spacemit/ime1_kernels.cpp` | IME i8 x i4 path; supporting headers included |
 | `q4_0-q8_0-IME-m4i` | `kernel.cpp`, `SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin` | 4x16 immediate reduction kernel |

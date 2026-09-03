@@ -83,7 +83,7 @@ static void decompress_iq2(const block_iq2_xxs *in, size_t bin, block_iq2_decomp
  * in: [M, K/QK] x [QK]
  * out: [M/MR, K/QK] x [QK, MR]
  */
-void pack_a(int m, int k, const block_q8_K *in, block_q8_Kx<MR> *out) {
+void pack_a_iq2_xxs_ir(int m, int k, const block_q8_K *in, block_q8_Kx<MR> *out) {
     for (int i_m = 0; i_m < m; i_m++) {
         for (int i_qk = 0; i_qk < k / QK_K; i_qk++) {
             auto block_in = &in[i_m * k / QK_K + i_qk];
@@ -100,7 +100,7 @@ void pack_a(int m, int k, const block_q8_K *in, block_q8_Kx<MR> *out) {
  * vx(W): [N, K/QK_K] x [QK_K]
  * vy(A): [M/MR, K/QK_K] x [QK_K, MR]
  */
-void ggml_gemm_iq2_xxs_q8_K(int k, float *GGML_RESTRICT s, size_t bs, const void *GGML_RESTRICT vx, size_t bx, const void *GGML_RESTRICT vy, size_t by, int m, int n) {
+void ggml_gemm_iq2_xxs_q8_K_ir(int k, float *GGML_RESTRICT s, size_t bs, const void *GGML_RESTRICT vx, size_t bx, const void *GGML_RESTRICT vy, size_t by, int m, int n) {
     assert(__riscv_vlenb() == NR);
     assert(k % QK_K == 0);
     assert(n % NR == 0);
