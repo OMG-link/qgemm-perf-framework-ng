@@ -1,5 +1,5 @@
-#ifndef IME_LLAMA_IME_H
-#define IME_LLAMA_IME_H
+#ifndef IME_KERNEL_LLAMA_DISPATCH_WRAPPER_H
+#define IME_KERNEL_LLAMA_DISPATCH_WRAPPER_H
 
 #include <cassert>
 #include <cstddef>

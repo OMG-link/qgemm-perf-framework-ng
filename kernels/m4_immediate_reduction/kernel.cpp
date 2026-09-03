@@ -2,7 +2,8 @@
 #include <riscv_vector.h>
 #include <smt_vector.h>
 
-#include "ime1.h"
+#include "kernel.h"
+#include "types.h"
 
 constexpr size_t kBlockLength = QK8_0;
 

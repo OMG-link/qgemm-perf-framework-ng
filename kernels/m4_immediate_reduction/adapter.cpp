@@ -3,7 +3,7 @@
 
 #include <memory>
 
-#include "ime1.h"
+#include "kernel.h"
 
 namespace ime::bench::adapters {
 namespace {

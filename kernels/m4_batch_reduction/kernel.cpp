@@ -2,7 +2,9 @@
 #include <cstddef>
 #include <smt_vector.h>
 
-#include "ime1.h"
+#include "kernel.h"
+#include "types.h"
+#include "rvv_vl.h"
 
 constexpr size_t kMr = 4;
 constexpr size_t kNr = 16;
@@ -160,31 +162,31 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(const uint8_t * GGML_RE
                 const size_t reduction_block_start = bk - reduction_count;
                 for (size_t rci = 0; rci < reduction_count; rci++) {
                     const size_t reduction_block = reduction_block_start + rci;
-                    vfloat32m8_t component = __riscv_vle32_v_f32m8(reduceInputBuffer + rci * kOutputM * kOutputN, vl(32, 8));
+                    vfloat32m8_t component = __riscv_vle32_v_f32m8(reduceInputBuffer + rci * kOutputM * kOutputN, ime::rvv::vl(32, 8));
                     vfloat16m1_t bsh = __riscv_vle16_v_f16m1(
-                        (_Float16 *)rowBlockW[reduction_block].d, vl(16, 1));
+                        (_Float16 *)rowBlockW[reduction_block].d, ime::rvv::vl(16, 1));
                     float as0 = baseBlockA[reduction_block].d[0];
                     float as1 = baseBlockA[reduction_block].d[1];
                     float as2 = baseBlockA[reduction_block].d[2];
                     float as3 = baseBlockA[reduction_block].d[3];
-                    vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, vl(16, 1));
-                    vfloat32m2_t comp_0 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 0), as0, vl(32, 2));
-                    vfloat32m2_t comp_1 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 1), as1, vl(32, 2));
-                    vfloat32m2_t comp_2 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 2), as2, vl(32, 2));
-                    vfloat32m2_t comp_3 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 3), as3, vl(32, 2));
-                    vfloat32m2_t acc_0 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 0), comp_0, bs, vl(32, 2));
-                    vfloat32m2_t acc_1 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 1), comp_1, bs, vl(32, 2));
-                    vfloat32m2_t acc_2 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 2), comp_2, bs, vl(32, 2));
-                    vfloat32m2_t acc_3 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 3), comp_3, bs, vl(32, 2));
+                    vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, ime::rvv::vl(16, 1));
+                    vfloat32m2_t comp_0 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 0), as0, ime::rvv::vl(32, 2));
+                    vfloat32m2_t comp_1 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 1), as1, ime::rvv::vl(32, 2));
+                    vfloat32m2_t comp_2 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 2), as2, ime::rvv::vl(32, 2));
+                    vfloat32m2_t comp_3 = __riscv_vfmul_vf_f32m2(__riscv_vget_v_f32m8_f32m2(component, 3), as3, ime::rvv::vl(32, 2));
+                    vfloat32m2_t acc_0 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 0), comp_0, bs, ime::rvv::vl(32, 2));
+                    vfloat32m2_t acc_1 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 1), comp_1, bs, ime::rvv::vl(32, 2));
+                    vfloat32m2_t acc_2 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 2), comp_2, bs, ime::rvv::vl(32, 2));
+                    vfloat32m2_t acc_3 = __riscv_vfmacc_vv_f32m2(__riscv_vget_v_f32m8_f32m2(acc, 3), comp_3, bs, ime::rvv::vl(32, 2));
                     acc = __riscv_vcreate_v_f32m2_f32m8(acc_0, acc_1, acc_2, acc_3);
                 }
             }
         }
 
-        __riscv_vse32_v_f32m2(rowC + 0 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 0), vl(32, 2));
-        __riscv_vse32_v_f32m2(rowC + 1 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 1), vl(32, 2));
-        __riscv_vse32_v_f32m2(rowC + 2 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 2), vl(32, 2));
-        __riscv_vse32_v_f32m2(rowC + 3 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 3), vl(32, 2));
+        __riscv_vse32_v_f32m2(rowC + 0 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 0), ime::rvv::vl(32, 2));
+        __riscv_vse32_v_f32m2(rowC + 1 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 1), ime::rvv::vl(32, 2));
+        __riscv_vse32_v_f32m2(rowC + 2 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 2), ime::rvv::vl(32, 2));
+        __riscv_vse32_v_f32m2(rowC + 3 * ldc, __riscv_vget_v_f32m8_f32m2(acc, 3), ime::rvv::vl(32, 2));
         
     }
 

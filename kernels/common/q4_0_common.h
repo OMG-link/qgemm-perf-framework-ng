@@ -5,7 +5,7 @@
 
 #include "types.h"
 #include "kernel_registry.h"
-#include "ime1.h"
+#include "ime1_dispatch.h"
 #include "llama_reference.h"
 
 namespace ime::bench::adapters {

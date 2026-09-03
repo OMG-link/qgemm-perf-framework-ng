@@ -206,9 +206,13 @@ function(add_ime_assembly source stem)
         DEPENDS
             ${CMAKE_CURRENT_SOURCE_DIR}/${source}
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ggml.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/ime.h
-            ${CMAKE_CURRENT_SOURCE_DIR}/include/ime1.h
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/types.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/ime1_dispatch.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/rvv_vl.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/llama_dispatch/wrapper.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/m4_batch_reduction/kernel.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/m4_immediate_reduction/kernel.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/m8_batch_reduction/kernel.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/perf.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/timer.hpp
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/gemm.h

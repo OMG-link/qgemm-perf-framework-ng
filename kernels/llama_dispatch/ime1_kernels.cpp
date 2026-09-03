@@ -1,4 +1,5 @@
-#include "ime1.h"
+#include "ime1_dispatch.h"
+#include "ggml.h"
 
 #include <algorithm>
 #include <cmath>

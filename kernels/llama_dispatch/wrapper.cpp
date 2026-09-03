@@ -8,19 +8,8 @@
 #include <stdexcept>
 #include <thread>
 
-#include "ime.h"
-
-namespace sqnbitgemm_spacemit_ime {
-namespace ime1 {
-size_t gemm_kernel_i8i4(size_t blk_len, const std::byte *quant_a_ptr, const std::byte *quant_b_data, const float *quant_b_scale, const std::byte *quant_b_zp, float *c_ptr, size_t count_m,
-                        size_t count_n, size_t count_k, size_t block_count_k, size_t ldc, const float *bias, const size_t scale_stride);
-
-void quantize_a_row_i8(size_t blk_len, const float *a_ptr, size_t count_k, std::byte *quant_a_ptr);
-
-void quantize_a_4row_i8(size_t blk_len, const float *a_ptr, size_t count_k, std::byte *quant_a_ptr);
-
-} // namespace ime1
-} // namespace sqnbitgemm_spacemit_ime
+#include "wrapper.h"
+#include "ime1_dispatch.h"
 
 void sqnbitgemm_spacemit_ime_i8i4(const size_t blk_len, const size_t gemm_k, const qnbitgemm_spacemit_ime_args *gemm_args, void *const per_gemm_ws, const size_t m_start, const size_t m_count,
                                   const size_t n_start, const size_t n_count) {
