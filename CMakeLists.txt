@@ -82,21 +82,28 @@ target_link_libraries(q4_K_rvv_my_objects PRIVATE ime_compile_options)
 target_compile_definitions(q4_K_rvv_my_objects PRIVATE ggml_gemm_q4_K_8x32_q8_K=ggml_gemm_q4_K_8x32_q8_K_my)
 target_compile_options(q4_K_rvv_my_objects PRIVATE -Wall -Wextra)
 
-function(add_iq2_xxs_gemm_object target directory symbol pack_symbol)
-    add_library(${target} OBJECT kernels/${directory}/kernel.cpp)
-    target_include_directories(${target} PRIVATE kernels/${directory})
+function(add_iq2_xxs_gemm_object target source symbol pack_symbol use_tcm)
+    add_library(${target} OBJECT ${source})
+    target_include_directories(${target} PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
+    )
     target_link_libraries(${target} PRIVATE ime_compile_options)
     target_compile_definitions(${target} PRIVATE
         ggml_gemm_iq2_xxs_q8_K=${symbol}
         pack_a=${pack_symbol}
     )
+    if(use_tcm)
+        target_compile_definitions(${target} PRIVATE USE_TCM)
+    endif()
     target_compile_options(${target} PRIVATE -Wall -Wextra)
 endfunction()
 
-add_iq2_xxs_gemm_object(iq2_xxs_rvv_br_objects iq2_xxs-q8_K-RVV-my-br
-                        ggml_gemm_iq2_xxs_q8_K_br pack_a_iq2_xxs_br)
-add_iq2_xxs_gemm_object(iq2_xxs_rvv_ir_objects iq2_xxs-q8_K-RVV-my-ir
-                        ggml_gemm_iq2_xxs_q8_K_ir pack_a_iq2_xxs_ir)
+add_iq2_xxs_gemm_object(iq2_xxs_rvv_br_objects
+                        ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp
+                        ggml_gemm_iq2_xxs_q8_K_br pack_a_iq2_xxs_br FALSE)
+add_iq2_xxs_gemm_object(iq2_xxs_rvv_ir_objects
+                        ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp
+                        ggml_gemm_iq2_xxs_q8_K_ir pack_a_iq2_xxs_ir FALSE)
 
 option(IME_ENABLE_TCM "Build IQ2_XXS kernels that use the fine_mm TCM allocator" ON)
 set(IME_TCM_RUNTIME "" CACHE FILEPATH
@@ -110,12 +117,12 @@ if(IME_ENABLE_TCM AND IME_TCM_RUNTIME)
     if(NOT EXISTS "${IME_TCM_RUNTIME}")
         message(FATAL_ERROR "IME_TCM_RUNTIME does not exist: ${IME_TCM_RUNTIME}")
     endif()
-    add_iq2_xxs_gemm_object(iq2_xxs_rvv_br_tcm_objects iq2_xxs-q8_K-RVV-my-br-tcm
-                            ggml_gemm_iq2_xxs_q8_K_br_tcm pack_a_iq2_xxs_br_tcm)
-    add_iq2_xxs_gemm_object(iq2_xxs_rvv_ir_tcm_objects iq2_xxs-q8_K-RVV-my-ir-tcm
-                            ggml_gemm_iq2_xxs_q8_K_ir_tcm pack_a_iq2_xxs_ir_tcm)
-    target_compile_definitions(iq2_xxs_rvv_br_tcm_objects PRIVATE USE_TCM)
-    target_compile_definitions(iq2_xxs_rvv_ir_tcm_objects PRIVATE USE_TCM)
+    add_iq2_xxs_gemm_object(iq2_xxs_rvv_br_tcm_objects
+                            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-my-br/kernel.cpp
+                            ggml_gemm_iq2_xxs_q8_K_br_tcm pack_a_iq2_xxs_br_tcm TRUE)
+    add_iq2_xxs_gemm_object(iq2_xxs_rvv_ir_tcm_objects
+                            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-my-ir/kernel.cpp
+                            ggml_gemm_iq2_xxs_q8_K_ir_tcm pack_a_iq2_xxs_ir_tcm TRUE)
     target_sources(ime-kernels PRIVATE
         $<TARGET_OBJECTS:iq2_xxs_rvv_br_tcm_objects>
         $<TARGET_OBJECTS:iq2_xxs_rvv_ir_tcm_objects>
@@ -187,6 +194,7 @@ function(add_ime_assembly source stem)
             -I${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
             -I${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
             -I${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
+            -I${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
             -S ${CMAKE_CURRENT_SOURCE_DIR}/${source}
             -o ${output}
         DEPENDS
@@ -196,6 +204,8 @@ function(add_ime_assembly source stem)
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ime1.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/perf.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/timer.hpp
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/gemm.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/ggml_min.h
         VERBATIM
         COMMENT "Generating ${output}"
     )
