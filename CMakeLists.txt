@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ime_llama LANGUAGES CXX)
+project(ime_llama LANGUAGES CXX ASM)
+
+add_subdirectory(machine-benchmarks)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
