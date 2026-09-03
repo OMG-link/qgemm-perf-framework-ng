@@ -1,4 +1,5 @@
 #include "adapter_common.h"
+#include "types.h"
 #include "llama_reference.h"
 #include <cstring>
 #include <memory>
@@ -11,19 +12,9 @@ uint8_t q4_value(const block_q4_K &block, size_t index) {
     return index % 64 < 32 ? packed & 0x0f : packed >> 4;
 }
 
-struct PackedQ4K32 {
-    _Float16 d[32], dmin[32];
-    int8_t scales[256], mins[256];
-    uint8_t qs[4096];
-};
-struct PackedQ8K12 {
-    float d[12];
-    int8_t qs[3072];
-    uint16_t bsums[96];
-};
 struct State : CommonState {
-    std::vector<PackedQ4K32> w;
-    std::vector<PackedQ8K12> a;
+    std::vector<block_q4_K_rvv_n32> w;
+    std::vector<block_q8_K_rvv_m12> a;
 };
 PrepareResult prepare(const BenchmarkRequest &r, const BenchmarkInput &g) {
     auto in = std::get_if<Q4_KQ8_KInput>(&g);

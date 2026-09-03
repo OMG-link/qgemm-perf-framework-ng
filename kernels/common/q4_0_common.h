@@ -3,6 +3,7 @@
 
 #include <cstring>
 
+#include "types.h"
 #include "kernel_registry.h"
 #include "ime1.h"
 #include "llama_reference.h"
@@ -11,7 +12,7 @@ namespace ime::bench::adapters {
 
 struct Q4_0M4N16ImePackedData {
     std::vector<std::byte> packed_a_m4;
-    std::vector<block_q4_0x16> packed_b;
+    std::vector<block_q4_0_ime_n16> packed_b;
 };
 
 template <size_t MRows, class State>
@@ -69,8 +70,9 @@ bool initialize_q4_0_ime(const BenchmarkRequest &request,
     }
 
     auto pack_q4_n16 = [](const block_q4_0 *rows) {
-        block_q4_0x16 output{};
-        for (size_t row = 0; row < 16; ++row) output.d[row] = rows[row].d;
+        block_q4_0_ime_n16 output{};
+        for (size_t row = 0; row < 16; ++row)
+            std::memcpy(&output.d[row], &rows[row].d, sizeof(rows[row].d));
         for (size_t row = 0; row < 16; ++row) {
             for (size_t j = 0; j < QK4_0 / 4; ++j) {
                 output.qs[row * QK4_0 / 4 + j] =

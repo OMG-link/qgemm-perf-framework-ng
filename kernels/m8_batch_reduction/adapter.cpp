@@ -10,7 +10,7 @@ namespace ime::bench::adapters {
 namespace {
 
 struct M8State : CommonState {
-    std::vector<block_q8_0x8_scale32> packed_a_m8;
+    std::vector<block_q8_0_ime_m8> packed_a_m8;
     std::vector<uint8_t> packed_b_qs;
     std::vector<uint16_t> packed_b_scales;
 };

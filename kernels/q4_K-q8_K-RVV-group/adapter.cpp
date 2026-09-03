@@ -1,4 +1,5 @@
 #include "adapter_common.h"
+#include "types.h"
 #include "llama_reference.h"
 #include <array>
 #include <cstring>
@@ -25,7 +26,7 @@ uint8_t q4_value(const block_q4_K &block, size_t index) {
     return index % 64 < 32 ? packed & 0x0f : packed >> 4;
 }
 
-void pack_group_subblock(uint8_t *destination, std::span<const block_q4_K> source, size_t subblock) {
+void pack_group_subblock(int8_t *destination, std::span<const block_q4_K> source, size_t subblock) {
     for (size_t column = 0; column < 16; ++column) {
         const uint8_t scale_low = q4_scale(source[column], subblock);
         const uint8_t scale_high = q4_scale(source[column + 16], subblock);
@@ -37,19 +38,9 @@ void pack_group_subblock(uint8_t *destination, std::span<const block_q4_K> sourc
     }
 }
 
-struct PackedQ4K32 {
-    _Float16 d[32], dmin[32];
-    uint8_t scales[512];
-    uint8_t qs[4096];
-};
-struct PackedQ8K4 {
-    float d[4];
-    int8_t qs[1024];
-    uint16_t bsums[32];
-};
 struct State : CommonState {
-    std::vector<PackedQ4K32> w;
-    std::vector<PackedQ8K4> a;
+    std::vector<block_q4_K_rvv_n32> w;
+    std::vector<block_q8_K_rvv_m4> a;
 };
 PrepareResult prepare(const BenchmarkRequest &r, const BenchmarkInput &g) {
     auto in = std::get_if<Q4_KQ8_KInput>(&g);

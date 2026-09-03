@@ -132,50 +132,6 @@ struct block_q8_0 {
     int8_t qs[QK8_0];
 };
 
-template <int Bits> constexpr int qk_0() {
-    if constexpr (Bits == 4) {
-        return QK4_0;
-    } else if constexpr (Bits == 8) {
-        return QK8_0;
-    } else {
-        return -1;
-    }
-}
-
-template <int Bits, int Rows> struct block {
-    ggml_half d[Rows];
-    alignas(8) int8_t qs[(qk_0<Bits>() * Rows * Bits) / 8];
-};
-
-using block_q4_0x4 = block<4, 4>;
-using block_q4_0x8 = block<4, 8>;
-using block_q4_0x16 = block<4, 16>;
-using block_q4_0x32 = block<4, 32>;
-using block_q8_0x4 = block<8, 4>;
-using block_q8_0x8 = block<8, 8>;
-using block_q8_0x12 = block<8, 12>;
-
-template <size_t Rows> struct block_q8_0x_scale32 {
-    float d[Rows];
-    int8_t qs[Rows * QK8_0];
-};
-
-using block_q8_0x4_scale32 = block_q8_0x_scale32<4>;
-using block_q8_0x8_scale32 = block_q8_0x_scale32<8>;
-
-template <int VL> struct block_q4_Kx {
-    ggml_half d[VL];
-    ggml_half dmin[VL];
-    uint8_t scales[VL * (QK_K / QK_SB_K) * 2];
-    uint8_t qs[VL * QK_K / 2];
-};
-
-template <int VL> struct block_q8_Kx {
-    float d[VL];
-    uint8_t qs[VL * QK_K];
-    uint16_t bsums[VL * QK_K / QK_SB_K];
-};
-
 struct block_q8_K {
     float d;
     int8_t qs[QK_K];
@@ -204,11 +160,6 @@ struct block_q4_K {
 
 static_assert(sizeof(block_q4_0) == sizeof(ggml_half) + QK4_0 / 2);
 static_assert(sizeof(block_q8_0) == sizeof(ggml_half) + QK8_0);
-static_assert(sizeof(block_q4_0x16) == 16 * sizeof(ggml_half) + 16 * QK4_0 / 2);
-static_assert(sizeof(block_q4_0x32) == 32 * sizeof(ggml_half) + 32 * QK4_0 / 2);
-static_assert(sizeof(block_q8_0x12) == 12 * sizeof(ggml_half) + 12 * QK8_0);
-static_assert(sizeof(block_q8_0x4_scale32) == 4 * sizeof(float) + 4 * QK8_0);
-static_assert(sizeof(block_q8_0x8_scale32) == 8 * sizeof(float) + 8 * QK8_0);
 static_assert(sizeof(block_iq2_xxs) == sizeof(ggml_half) + QK_K / 4);
 
 #endif

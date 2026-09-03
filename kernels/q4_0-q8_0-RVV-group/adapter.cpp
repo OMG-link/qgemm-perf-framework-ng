@@ -1,5 +1,5 @@
 #include "adapter_common.h"
-#include "ggml_def.h"
+#include "types.h"
 #include "llama_reference.h"
 
 #include <cstring>
@@ -10,8 +10,8 @@ void ggml_gemm_q4_0_12x32_q8_0(int k, float *s, size_t bs, const void *vx, const
 namespace ime::bench::adapters {
 namespace {
 struct State : CommonState {
-    std::vector<block_q4_0x32> b32;
-    std::vector<block_q8_0x12> a12;
+    std::vector<block_q4_0_rvv_n32> b32;
+    std::vector<block_q8_0_rvv_m12> a12;
 };
 
 PrepareResult prepare(const BenchmarkRequest &r, const BenchmarkInput &generic) {
@@ -33,7 +33,7 @@ PrepareResult prepare(const BenchmarkRequest &r, const BenchmarkInput &generic) 
         for (size_t b = 0; b < s->blocks_k(); ++b) {
             auto &a = s->a12[(tm / 12) * s->blocks_k() + b];
             for (size_t x = 0; x < 12; ++x)
-                a.d[x] = aq[(tm + x) * s->blocks_k() + b].d;
+                std::memcpy(&a.d[x], &aq[(tm + x) * s->blocks_k() + b].d, sizeof(aq[0].d));
             for (size_t z = 0; z < 16; ++z) {
                 for (size_t x = 0; x < 8; ++x)
                     a.qs[z * 24 + x] = aq[(tm + x) * s->blocks_k() + b].qs[z];
@@ -49,7 +49,8 @@ PrepareResult prepare(const BenchmarkRequest &r, const BenchmarkInput &generic) 
         for (size_t b = 0; b < s->blocks_k(); ++b) {
             auto &w = s->b32[(tn / 32) * s->blocks_k() + b];
             for (size_t x = 0; x < 32; ++x) {
-                w.d[x] = in->weight[(tn + x) * s->blocks_k() + b].d;
+                std::memcpy(&w.d[x], &in->weight[(tn + x) * s->blocks_k() + b].d,
+                            sizeof(in->weight[0].d));
                 for (size_t z = 0; z < 16; ++z)
                     w.qs[z * 32 + x] = in->weight[(tn + x) * s->blocks_k() + b].qs[z];
             }

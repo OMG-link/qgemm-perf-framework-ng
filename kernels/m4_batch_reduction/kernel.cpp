@@ -26,8 +26,8 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed(const uint8_t * GGML_RE
                                                 const size_t      ldc) {
     const size_t numKIter = kBlockLength / kStepKPerIter;
 
-    auto baseBlockA = (const block_q8_0x4_scale32 *)baseA;
-    auto baseBlockW = (const block_q4_0x16 *)baseW;
+    auto baseBlockA = (const block_q8_0_ime_m4 *)baseA;
+    auto baseBlockW = (const block_q4_0_ime_n16 *)baseW;
     for (size_t n = 0; n < CountN; n += kOutputN) {
         auto rowBlockW = &baseBlockW[n / kOutputN * BlockCountK];
         float * rowC = baseC + n;

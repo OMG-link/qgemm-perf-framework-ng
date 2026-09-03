@@ -71,13 +71,19 @@ target_link_libraries(q4_0_rvv_group_objects PRIVATE ime_base_compile_options)
 target_compile_options(q4_0_rvv_group_objects PRIVATE -Wall -Wextra)
 
 add_library(q4_K_rvv_group_objects OBJECT kernels/q4_K-q8_K-RVV-group/kernel.cpp)
-target_include_directories(q4_K_rvv_group_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-group)
+target_include_directories(q4_K_rvv_group_objects PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-group
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
+)
 target_link_libraries(q4_K_rvv_group_objects PRIVATE ime_base_compile_options)
 target_compile_definitions(q4_K_rvv_group_objects PRIVATE ggml_gemm_q4_K_8x32_q8_K=ggml_gemm_q4_K_8x32_q8_K_group)
 target_compile_options(q4_K_rvv_group_objects PRIVATE -Wall -Wextra)
 
 add_library(q4_K_rvv_my_objects OBJECT kernels/q4_K-q8_K-RVV-my/kernel.cpp)
-target_include_directories(q4_K_rvv_my_objects PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-my)
+target_include_directories(q4_K_rvv_my_objects PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/q4_K-q8_K-RVV-my
+    ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
+)
 target_link_libraries(q4_K_rvv_my_objects PRIVATE ime_compile_options)
 target_compile_definitions(q4_K_rvv_my_objects PRIVATE ggml_gemm_q4_K_8x32_q8_K=ggml_gemm_q4_K_8x32_q8_K_my)
 target_compile_options(q4_K_rvv_my_objects PRIVATE -Wall -Wextra)
@@ -202,6 +208,7 @@ function(add_ime_assembly source stem)
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ggml.h
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ime.h
             ${CMAKE_CURRENT_SOURCE_DIR}/include/ime1.h
+            ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common/types.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/perf.h
             ${CMAKE_CURRENT_SOURCE_DIR}/bench/timer.hpp
             ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common/gemm.h

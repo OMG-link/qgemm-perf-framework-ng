@@ -36,7 +36,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
 
     const size_t numKIter = kBlockLength / kStepKPerIter;
 
-    auto baseBlockA = (const block_q8_0x8_scale32 *)baseA;
+    auto baseBlockA = (const block_q8_0_ime_m8 *)baseA;
     for (size_t n = 0; n < CountN; n += kOutputN) {
         float *rowC = baseC + n;
 

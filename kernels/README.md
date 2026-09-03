@@ -26,6 +26,6 @@ directories; CMake still gives them their distinct exported symbols and
 benchmark IDs.
 
 The registered upstream RVV kernels are local, dependency-free extracts rather
-than complete copies of llama.cpp's `quants.c`. The standalone imported GEMMs
-retain their original `ggml_def.h`/`gemm.h` layouts so their ABI assumptions
-remain reviewable.
+than complete copies of llama.cpp's `quants.c`. Standard GGML block definitions
+live in `include/ggml.h`; custom packed kernel layouts live in
+`kernels/common/types.h` so adapters and kernels share the same ABI definitions.

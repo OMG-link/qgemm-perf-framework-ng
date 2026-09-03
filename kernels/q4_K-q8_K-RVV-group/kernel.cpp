@@ -1,9 +1,6 @@
-#include "ggml_def.h"
+#include "types.h"
+#include <riscv_vector.h>
 // #include "riscv_subt.h"
-
-using block_q4_Kx32 = block_q4_Kx<32>;
-using block_q8_Kx12 = block_q8_Kx<12>;
-using block_q8_Kx4 = block_q8_Kx<4>;
 
 void ggml_gemm_q4_K_8x32_q8_K(int n, float *GGML_RESTRICT s, size_t bs, const void *GGML_RESTRICT vx, const void *GGML_RESTRICT vy, int nr, int nc) {
     const int qk = QK_K;
@@ -20,8 +17,8 @@ void ggml_gemm_q4_K_8x32_q8_K(int n, float *GGML_RESTRICT s, size_t bs, const vo
 
     UNUSED(blocklen);
 
-    const block_q4_Kx32 *b_ptr_start = (const block_q4_Kx32 *)vx;
-    const block_q8_Kx4 *a_ptr_start = (const block_q8_Kx4 *)vy;
+    const block_q4_K_rvv_n32 *b_ptr_start = (const block_q4_K_rvv_n32 *)vx;
+    const block_q8_K_rvv_m4 *a_ptr_start = (const block_q8_K_rvv_m4 *)vy;
     size_t vl = 32;
 
     uint32_t utmp[16];
@@ -33,10 +30,10 @@ void ggml_gemm_q4_K_8x32_q8_K(int n, float *GGML_RESTRICT s, size_t bs, const vo
 
     for (int64_t y = 0; y < nr / 4; y++) { // M
 
-        const block_q8_Kx4 *a_ptr = a_ptr_start + (y * nb);
+        const block_q8_K_rvv_m4 *a_ptr = a_ptr_start + (y * nb);
         for (int64_t x = 0; x < nc / 32; x++) { // N
 
-            const block_q4_Kx32 *b_ptr = b_ptr_start + (x * nb);
+            const block_q4_K_rvv_n32 *b_ptr = b_ptr_start + (x * nb);
 
             //行累加和
             vfloat32m4_t sum_rows0 = __riscv_vfmv_v_f_f32m4(0.0f, vl);
@@ -91,7 +88,7 @@ void ggml_gemm_q4_K_8x32_q8_K(int n, float *GGML_RESTRICT s, size_t bs, const vo
 
                     //处理scales和mins
                     //是否可以向量化实现
-                    memcpy(utmp, b_ptr[b].scales + 96 * sb, 48);
+                    memcpy(utmp, reinterpret_cast<const int8_t *>(b_ptr[b].scales) + 96 * sb, 48);
                     utmp[15] = ((utmp[11] >> 4) & kmask2) | (((utmp[7] >> 6) & kmask3) << 4);
                     utmp[14] = ((utmp[10] >> 4) & kmask2) | (((utmp[6] >> 6) & kmask3) << 4);
                     utmp[13] = ((utmp[9] >> 4) & kmask2) | (((utmp[5] >> 6) & kmask3) << 4);
@@ -116,7 +113,7 @@ void ggml_gemm_q4_K_8x32_q8_K(int n, float *GGML_RESTRICT s, size_t bs, const vo
                     vint16m2_t vec_scales_32 = __riscv_vreinterpret_v_u16m2_i16m2(__riscv_vzext_vf2_u16m2(__riscv_vle8_v_u8m1(scales, vl), vl));
                     vint16m2_t vec_mins_32 = __riscv_vreinterpret_v_u16m2_i16m2(__riscv_vzext_vf2_u16m2(__riscv_vle8_v_u8m1(mins, vl), vl));
 
-                    memcpy(utmp, b_ptr[b].scales + 48 + 96 * sb, 48);
+                    memcpy(utmp, reinterpret_cast<const int8_t *>(b_ptr[b].scales) + 48 + 96 * sb, 48);
                     utmp[15] = ((utmp[11] >> 4) & kmask2) | (((utmp[7] >> 6) & kmask3) << 4);
                     utmp[14] = ((utmp[10] >> 4) & kmask2) | (((utmp[6] >> 6) & kmask3) << 4);
                     utmp[13] = ((utmp[9] >> 4) & kmask2) | (((utmp[5] >> 6) & kmask3) << 4);

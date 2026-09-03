@@ -1,4 +1,4 @@
-#include "ggml_def.h"
+#include "types.h"
 #include <algorithm>
 #include <cstdio>
 #include <riscv_vector.h>
@@ -38,8 +38,8 @@ void ggml_gemm_q4_0_12x32_q8_0(int k, float *GGML_RESTRICT s, size_t bs, const v
     // int64_t start_time = ggml_time_us();
 
     // riscv，一次处理输入矩阵的4行*参数矩阵的8行
-    const block_q4_0x32 *b_ptr_start = (const block_q4_0x32 *)vx;
-    const block_q8_0x12 *a_ptr_start = (const block_q8_0x12 *)vy;
+    const block_q4_0_rvv_n32 *b_ptr_start = (const block_q4_0_rvv_n32 *)vx;
+    const block_q8_0_rvv_m12 *a_ptr_start = (const block_q8_0_rvv_m12 *)vy;
     // size_t vl = 32;   //vl = VLEN/8
 
     // int vl = __riscv_vsetvl_e32m1(__riscv_vlenb() / sizeof(int8_t));
@@ -52,11 +52,11 @@ void ggml_gemm_q4_0_12x32_q8_0(int k, float *GGML_RESTRICT s, size_t bs, const v
 
     for (int y = 0; y < anr / mrr; y++) { // M
 
-        const block_q8_0x12 *a_ptr = a_ptr_start + (y * nb);
+        const block_q8_0_rvv_m12 *a_ptr = a_ptr_start + (y * nb);
 
         for (int x = 0; x < n / nrr; x++) { // N
 
-            const block_q4_0x32 *b_ptr = b_ptr_start + (x * nb);
+            const block_q4_0_rvv_n32 *b_ptr = b_ptr_start + (x * nb);
 
             float sum_row[mnr] = {0.0};
 

@@ -1,9 +1,6 @@
-#include "ggml_def.h"
+#include "types.h"
 #include <riscv_vector.h>
 // #include "riscv_subt.h"
-
-using block_q4_Kx32 = block_q4_Kx<32>;
-using block_q8_Kx12 = block_q8_Kx<12>;
 
 void ggml_gemm_q4_K_8x32_q8_K(int k, float *GGML_RESTRICT s, size_t bs, const void *GGML_RESTRICT vx, const void *GGML_RESTRICT vy, int m, int n) {
     const int MR = 12;
@@ -14,8 +11,8 @@ void ggml_gemm_q4_K_8x32_q8_K(int k, float *GGML_RESTRICT s, size_t bs, const vo
     assert(m % MR == 0);
     assert(n % NR == 0);
 
-    auto blocks_w = (const block_q4_Kx32 *)vx;
-    auto blocks_a = (const block_q8_Kx12 *)vy;
+    auto blocks_w = (const block_q4_K_rvv_n32 *)vx;
+    auto blocks_a = (const block_q8_K_rvv_m12 *)vy;
 
 #define CURRENT_MR 12
 #define REPEAT_MR(fun) _REPEAT_HELPER1(CURRENT_MR, fun)
@@ -26,12 +23,12 @@ void ggml_gemm_q4_K_8x32_q8_K(int k, float *GGML_RESTRICT s, size_t bs, const vo
 #define OP_DEF_SUM_SUBBLOCK(i) vint16m2_t sum_subblock##i;
 #define OP_ACCUMULATE_SUBBLOCK_FIRST_ROUND(i)                                                                                                                                                          \
     {                                                                                                                                                                                                  \
-        int8_t a = block_a.qs[(i_qsk * QK_SK + i_k) * MR + i];                                                                                                                                         \
+        int8_t a = block_a.qs[(i_qsk * kQKSubBlock + i_k) * MR + i];                                                                                                                                         \
         sum_subblock##i = __riscv_vwmul_vx_i16m2(w, a, NR);                                                                                                                                            \
     }
 #define OP_ACCUMULATE_SUBBLOCK_NEXT_ROUNDS(i)                                                                                                                                                          \
     {                                                                                                                                                                                                  \
-        int8_t a = block_a.qs[(i_qsk * QK_SK + i_k) * MR + i];                                                                                                                                         \
+        int8_t a = block_a.qs[(i_qsk * kQKSubBlock + i_k) * MR + i];                                                                                                                                         \
         sum_subblock##i = __riscv_vwmacc_vx_i16m2(sum_subblock##i, a, w, NR);                                                                                                                          \
     }
 #define OP_ACCUMULATE_BLOCK_FIRST_ROUND(i)                                                                                                                                                             \
@@ -57,16 +54,16 @@ void ggml_gemm_q4_K_8x32_q8_K(int k, float *GGML_RESTRICT s, size_t bs, const vo
 
     for (int i_mr = 0; i_mr < m / MR; i_mr++) {
         for (int i_nr = 0; i_nr < n / NR; i_nr++) {
-            float32_t sum[MR * NR];
+            float sum[MR * NR];
             for (int i_qk = 0; i_qk < k / QK_K; i_qk++) { // K: block
                 auto &block_a = blocks_a[i_mr * (k / QK_K) + i_qk];
                 auto &block_w = blocks_w[i_nr * (k / QK_K) + i_qk];
                 int32_t sum_block[MR * NR] = {0};
-                for (int i_qsk = 0; i_qsk < QK_K / QK_SK; i_qsk++) { // K: subblock
+                for (int i_qsk = 0; i_qsk < QK_K / kQKSubBlock; i_qsk++) { // K: subblock
                     REPEAT_MR(OP_DEF_SUM_SUBBLOCK)
 #pragma GCC unroll 16
-                    for (int i_2k = 0; i_2k < QK_SK / 2; i_2k++) { // K: 2 indices
-                        vuint8m1_t wx2 = __riscv_vle8_v_u8m1(&block_w.qs[(i_qsk * (QK_SK / 2) + i_2k) * NR], NR);
+                    for (int i_2k = 0; i_2k < kQKSubBlock / 2; i_2k++) { // K: 2 indices
+                        vuint8m1_t wx2 = __riscv_vle8_v_u8m1(&block_w.qs[(i_qsk * (kQKSubBlock / 2) + i_2k) * NR], NR);
                         {
                             vint8m1_t w = __riscv_vreinterpret_v_u8m1_i8m1(__riscv_vand_vx_u8m1(wx2, 0x0F, NR));
                             int i_k = i_2k * 2;
@@ -116,7 +113,7 @@ void ggml_gemm_q4_K_8x32_q8_K(int k, float *GGML_RESTRICT s, size_t bs, const vo
                 }
             }
 
-            float32_t sum_min[MR * NR];
+            float sum_min[MR * NR];
             for (int64_t i_qk = 0; i_qk < k / QK_K; i_qk++) {
                 auto &block_a = blocks_a[i_mr * (k / QK_K) + i_qk];
                 auto &block_w = blocks_w[i_nr * (k / QK_K) + i_qk];

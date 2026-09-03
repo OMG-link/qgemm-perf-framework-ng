@@ -11,8 +11,8 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTR
 
     const size_t INNER = kBlockLength / 16;
 
-    auto A = (const block_q8_0x4_scale32 *)QuantA;
-    auto B = (const block_q4_0x16 *)QuantBData;
+    auto A = (const block_q8_0_ime_m4 *)QuantA;
+    auto B = (const block_q4_0_ime_n16 *)QuantBData;
 
     for (size_t n = 0; n < CountN; n += 16) {
 
