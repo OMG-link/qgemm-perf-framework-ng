@@ -9,7 +9,7 @@
 namespace ime::bench::adapters {
 
 class CommonState {
-public:
+  public:
     virtual ~CommonState() = default;
     size_t m() const noexcept { return m_value; }
     size_t n() const noexcept { return n_value; }
@@ -25,8 +25,7 @@ public:
     std::vector<float> output_value;
 };
 
-template <size_t MMultiple, size_t NMultiple, size_t KMultiple>
-ValidationResult validate_shape(const BenchmarkRequest &request) {
+template <size_t MMultiple, size_t NMultiple, size_t KMultiple> ValidationResult validate_shape(const BenchmarkRequest &request) {
     static_assert(MMultiple > 0 && NMultiple > 0 && KMultiple > 0);
     if (!request.m || !request.n || !request.k) {
         return {false, "M, N and K must be positive"};
@@ -52,6 +51,8 @@ void register_q4_0_ime_upstream();
 void register_q4_0_ime_m4b();
 void register_q4_0_ime_m4i();
 void register_q4_0_ime_m8b();
+void register_q4_0_ime_m8b_dyn_pre_unpack();
+void register_q4_0_ime_m8b_dyn_pre_unpack_cache_blocking();
 void register_q4_0_ime_m4n32b();
 void register_q4_0_ime_m32n4();
 void register_q4_0_rvv_group();

@@ -95,6 +95,8 @@ int main(int argc, char **argv) {
     adapters::register_q4_0_ime_m4b();
     adapters::register_q4_0_ime_m4i();
     adapters::register_q4_0_ime_m8b();
+    adapters::register_q4_0_ime_m8b_dyn_pre_unpack();
+    adapters::register_q4_0_ime_m8b_dyn_pre_unpack_cache_blocking();
     adapters::register_q4_0_ime_m4n32b();
     adapters::register_q4_0_ime_m32n4();
     adapters::register_q4_0_rvv_group();
