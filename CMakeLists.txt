@@ -2,14 +2,14 @@ cmake_minimum_required(VERSION 3.20)
 
 project(ime_llama LANGUAGES CXX ASM)
 
-add_subdirectory(machine-benchmarks)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 set(IME_ARCH "rv64gcv_zvfh_zicbop_zba_xsmtvdot" CACHE STRING
     "RISC-V architecture used by the SpacemiT IME kernels")
 set(IME_TUNE "spacemit-x60" CACHE STRING
     "RISC-V CPU tuning target")
+
+add_subdirectory(machine-benchmarks)
+
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(ime_base_compile_options INTERFACE)
 target_compile_features(ime_base_compile_options INTERFACE cxx_std_20)
