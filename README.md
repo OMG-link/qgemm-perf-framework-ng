@@ -43,7 +43,36 @@ The benchmark accepts the following general options:
 --samples N
 --iterations N       # omitted: calibrate automatically
 --no-verify
+--perf-events LIST    # replace the default cycles event with a comma-separated list
+--perf-event EVENT    # append one event; may be repeated
 ```
+
+The default event list is `cycles`. Built-in event names are:
+
+```text
+cycles,instructions,task-clock,page-faults
+l1d-access,l1d-miss,llc-access,llc-miss
+dtlb-access,dtlb-miss
+```
+
+Machine-specific raw PMU events use `raw:NAME:CONFIG`, where `CONFIG` accepts
+decimal or `0x` notation. For example, the SpacemiT X60 vector-load and L1D
+load-miss events can be measured together with cycles using:
+
+```bash
+./compile-and-test.sh run --kernel ID --m M --n N --k K \
+  --perf-events cycles,raw:vector-load:0x39,raw:l1d-miss:0x5
+```
+
+Perf counters form one pinned event group and are enabled only around each timed
+kernel callback. Input preparation, verification, warmup, state reset, checksum,
+and output formatting are outside the measured region. Each metric is reported
+per benchmark iteration with its minimum running percentage. A result is
+rejected if any counter runs for less than 99% of the enabled time; reduce the
+event list if the hardware cannot schedule the complete group. Automatic
+iteration calibration always uses a separate cycles counter, so a requested
+event list does not need to contain `cycles`. FMA/cycle is unavailable when
+`cycles` is omitted.
 
 Each registered kernel provides its own implementation, adapter, layout, and
 shape validation. The framework keeps kernel-specific details out of the

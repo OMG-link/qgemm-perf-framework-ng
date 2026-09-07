@@ -165,36 +165,104 @@ BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkR
 
     kernel.callbacks.reset(prepared.state);
     kernel.callbacks.run(prepared.state, request.warmup_iterations);
-    const int cycles_fd = perf_event_cycles();
+    if (request.samples == 0 || request.perf_events.empty()) {
+        result.message = "samples and perf event list must be non-empty";
+        return result;
+    }
+
     size_t iterations = request.iterations;
     if (!iterations) {
+        PerfEventGroup calibration;
+        const std::array calibration_events{cycles_event()};
+        std::string error;
+        if (!calibration.open(calibration_events, error)) {
+            result.message = error;
+            return result;
+        }
         kernel.callbacks.reset(prepared.state);
-        perf_reset(cycles_fd);
+        asm volatile("" ::: "memory");
+        if (!calibration.start(error)) {
+            result.message = error;
+            return result;
+        }
         kernel.callbacks.run(prepared.state, 1);
-        perf_disable(cycles_fd);
-        const uint64_t elapsed = std::max<uint64_t>(perf_read(cycles_fd), 1);
+        asm volatile("" ::: "memory");
+        std::vector<PerfEventValue> values;
+        if (!calibration.stop_and_read(values, error)) {
+            result.message = error;
+            return result;
+        }
+        if (!values[0].time_enabled || values[0].time_running * 100 < values[0].time_enabled * 99) {
+            result.message = "cycles calibration counter ran less than 99%";
+            return result;
+        }
+        const uint64_t elapsed = std::max<uint64_t>(values[0].value, 1);
         iterations = std::max<size_t>(1, request.target_cycles / elapsed);
     }
     result.iterations = iterations;
-    std::vector<uint64_t> samples;
+
+    PerfEventGroup counters;
+    std::string error;
+    if (!counters.open(request.perf_events, error)) {
+        result.message = error;
+        return result;
+    }
+    std::vector<std::vector<double>> event_samples(request.perf_events.size());
+    std::vector<double> minimum_running(request.perf_events.size(), 100.0);
     for (size_t sample = 0; sample < request.samples; ++sample) {
         kernel.callbacks.reset(prepared.state);
         asm volatile("" ::: "memory");
-        perf_reset(cycles_fd);
+        if (!counters.start(error)) {
+            result.message = error;
+            return result;
+        }
         kernel.callbacks.run(prepared.state, iterations);
-        perf_disable(cycles_fd);
-        const uint64_t elapsed = perf_read(cycles_fd);
         asm volatile("" ::: "memory");
-        samples.push_back(elapsed / iterations);
+        std::vector<PerfEventValue> values;
+        if (!counters.stop_and_read(values, error)) {
+            result.message = error;
+            return result;
+        }
+        for (size_t event = 0; event < values.size(); ++event) {
+            const auto &value = values[event];
+            if (!value.time_enabled) {
+                result.message = "perf event " + request.perf_events[event].name + " was never enabled";
+                return result;
+            }
+            const double running = 100.0 * static_cast<double>(value.time_running) / value.time_enabled;
+            minimum_running[event] = std::min(minimum_running[event], running);
+            if (running < 99.0) {
+                char detail[192];
+                std::snprintf(detail, sizeof(detail), "perf event %s ran only %.3f%% (need >=99%%)", request.perf_events[event].name.c_str(), running);
+                result.message = detail;
+                return result;
+            }
+            event_samples[event].push_back(static_cast<double>(value.value) / iterations);
+        }
     }
-    perf_close_event(cycles_fd);
-    std::sort(samples.begin(), samples.end());
-    result.min_cycles = samples.front();
-    result.median_cycles = samples[samples.size() / 2];
+
+    bool has_cycles = false;
+    for (size_t event = 0; event < request.perf_events.size(); ++event) {
+        auto &samples = event_samples[event];
+        std::sort(samples.begin(), samples.end());
+        PerfMetricResult metric;
+        metric.name = request.perf_events[event].name;
+        metric.min_per_iteration = samples.front();
+        metric.median_per_iteration = samples[samples.size() / 2];
+        metric.min_running_percent = minimum_running[event];
+        result.perf_metrics.push_back(metric);
+        if (metric.name == "cycles") {
+            has_cycles = true;
+            result.min_cycles = static_cast<uint64_t>(metric.min_per_iteration);
+            result.median_cycles = static_cast<uint64_t>(metric.median_per_iteration);
+        }
+    }
     result.checksum = kernel.callbacks.checksum(prepared.state);
-    const double fma = static_cast<double>(request.m) * request.n * request.k;
-    result.fma_per_cycle = fma / result.median_cycles;
-    result.utilization_percent = result.fma_per_cycle / 128.0 * 100.0;
+    if (has_cycles && result.median_cycles) {
+        const double fma = static_cast<double>(request.m) * request.n * request.k;
+        result.fma_per_cycle = fma / result.median_cycles;
+        result.utilization_percent = result.fma_per_cycle / 128.0 * 100.0;
+    }
     return result;
 }
 

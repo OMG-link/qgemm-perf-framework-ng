@@ -13,6 +13,12 @@
 
 namespace ime::bench {
 
+struct PerfEventSpec {
+    std::string name;
+    uint32_t type = 0;
+    uint64_t config = 0;
+};
+
 struct BenchmarkRequest {
     size_t m = 0;
     size_t n = 0;
@@ -23,6 +29,7 @@ struct BenchmarkRequest {
     uint64_t target_cycles = 100'000'000;
     uint64_t seed = 1;
     bool verify = true;
+    std::vector<PerfEventSpec> perf_events;
 };
 
 enum class QuantizationType {

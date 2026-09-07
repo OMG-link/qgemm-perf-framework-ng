@@ -1,121 +1,120 @@
 #ifndef PERF_H
 #define PERF_H
 
+#include <cerrno>
+#include <cstdint>
+#include <cstring>
 #include <linux/perf_event.h>
-#include <sched.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <span>
+#include <string>
 #include <sys/ioctl.h>
 #include <sys/syscall.h>
-#include <time.h>
 #include <unistd.h>
-#ifdef _OPENMP
-#include <omp.h>
-#endif
+#include <utility>
+#include <vector>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include "framework/kernel_registry.h"
 
-static inline void flush_l3_cache() {
-#ifdef _OPENMP
-#pragma omp parallel
-    {
-#endif
-        static const int seed = time(0) % 256;
-        const size_t L3_CACHE_SIZE_KB = 8 * 1024;
-        const size_t BUFFER_SIZE = L3_CACHE_SIZE_KB * 1024 * 2;
-        static char *buffer = static_cast<char *>(malloc(BUFFER_SIZE));
-        volatile char sink = 0;
-        for (size_t i = 0; i < BUFFER_SIZE; i += 64) {
-            buffer[i] = static_cast<char>((seed * i) % 128);
+namespace ime::bench {
+
+struct PerfEventValue {
+    uint64_t value = 0;
+    uint64_t time_enabled = 0;
+    uint64_t time_running = 0;
+};
+
+class PerfEventGroup {
+  public:
+    PerfEventGroup() = default;
+    PerfEventGroup(const PerfEventGroup &) = delete;
+    PerfEventGroup &operator=(const PerfEventGroup &) = delete;
+    PerfEventGroup(PerfEventGroup &&other) noexcept { *this = std::move(other); }
+    PerfEventGroup &operator=(PerfEventGroup &&other) noexcept {
+        if (this != &other) {
+            close_all();
+            fds_ = std::move(other.fds_);
+            specs_ = std::move(other.specs_);
+            other.fds_.clear();
         }
-        for (size_t i = 0; i < BUFFER_SIZE; i += 64) {
-            sink ^= buffer[i];
+        return *this;
+    }
+    ~PerfEventGroup() { close_all(); }
+
+    bool open(std::span<const PerfEventSpec> specs, std::string &error) {
+        close_all();
+        specs_.assign(specs.begin(), specs.end());
+        for (size_t i = 0; i < specs_.size(); ++i) {
+            perf_event_attr attr{};
+            attr.type = specs_[i].type;
+            attr.size = sizeof(attr);
+            attr.config = specs_[i].config;
+            attr.disabled = i == 0;
+            attr.pinned = i == 0;
+            attr.exclude_kernel = 1;
+            attr.exclude_hv = 1;
+            attr.read_format = PERF_FORMAT_TOTAL_TIME_ENABLED | PERF_FORMAT_TOTAL_TIME_RUNNING;
+            const int group_fd = fds_.empty() ? -1 : fds_.front();
+            const int fd = static_cast<int>(syscall(__NR_perf_event_open, &attr, 0, -1, group_fd,
+                                                    PERF_FLAG_FD_CLOEXEC));
+            if (fd < 0) {
+                error = "perf_event_open(" + specs_[i].name + "): " + std::strerror(errno);
+                close_all();
+                return false;
+            }
+            fds_.push_back(fd);
         }
-#ifdef _OPENMP
+        return true;
     }
+
+    bool start(std::string &error) {
+        if (fds_.empty()) {
+            error = "no perf events configured";
+            return false;
+        }
+        if (ioctl(fds_.front(), PERF_EVENT_IOC_RESET, PERF_IOC_FLAG_GROUP) < 0 ||
+            ioctl(fds_.front(), PERF_EVENT_IOC_ENABLE, PERF_IOC_FLAG_GROUP) < 0) {
+            error = "perf group reset/enable: " + std::string(std::strerror(errno));
+            return false;
+        }
+        return true;
+    }
+
+    bool stop_and_read(std::vector<PerfEventValue> &values, std::string &error) {
+        if (ioctl(fds_.front(), PERF_EVENT_IOC_DISABLE, PERF_IOC_FLAG_GROUP) < 0) {
+            error = "perf group disable: " + std::string(std::strerror(errno));
+            return false;
+        }
+        values.clear();
+        values.reserve(fds_.size());
+        for (size_t i = 0; i < fds_.size(); ++i) {
+            PerfEventValue value;
+            const ssize_t bytes = read(fds_[i], &value, sizeof(value));
+            if (bytes != static_cast<ssize_t>(sizeof(value))) {
+                error = "perf read(" + specs_[i].name + "): " +
+                        (bytes < 0 ? std::string(std::strerror(errno))
+                                   : "short read (event group may not fit available hardware counters)");
+                return false;
+            }
+            values.push_back(value);
+        }
+        return true;
+    }
+
+  private:
+    void close_all() noexcept {
+        for (int fd : fds_) close(fd);
+        fds_.clear();
+        specs_.clear();
+    }
+
+    std::vector<int> fds_;
+    std::vector<PerfEventSpec> specs_;
+};
+
+inline PerfEventSpec cycles_event() {
+    return {"cycles", PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES};
+}
+
+} // namespace ime::bench
+
 #endif
-}
-
-static inline int get_cpu_id() { return sched_getcpu(); }
-
-static inline int perf_open_event(uint32_t type, uint64_t config) {
-    struct perf_event_attr pe;
-    memset(&pe, 0, sizeof(pe));
-    pe.type = type;
-    pe.size = sizeof(pe);
-    pe.config = config;
-    pe.disabled = 1;
-    pe.inherit = 1;
-    pe.exclude_kernel = 1;
-    pe.exclude_hv = 1;
-
-    int fd = syscall(__NR_perf_event_open, &pe, 0, -1, -1, 0);
-    if (fd < 0) {
-        perror("perf_event_open");
-        exit(1);
-    }
-    return fd;
-}
-
-static inline void perf_close_event(int fd) {
-    if (close(fd) < 0) {
-        perror("close");
-        exit(1);
-    }
-}
-
-static inline void perf_reset(int fd) {
-    if (ioctl(fd, PERF_EVENT_IOC_RESET, 0) < 0 || ioctl(fd, PERF_EVENT_IOC_ENABLE, 0) < 0) {
-        perror("perf reset/enable");
-        exit(1);
-    }
-}
-
-static inline void perf_disable(int fd) {
-    if (ioctl(fd, PERF_EVENT_IOC_DISABLE, 0) < 0) {
-        perror("perf disable");
-        exit(1);
-    }
-}
-
-static inline uint64_t perf_read(int fd) {
-    uint64_t value;
-    ssize_t ret = read(fd, &value, sizeof(value));
-    if (ret != sizeof(value)) {
-        perror("perf read");
-        exit(1);
-    }
-    return value;
-}
-
-static inline int perf_event_cycles(void) { return perf_open_event(PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES); }
-
-static inline int perf_event_instructions(void) { return perf_open_event(PERF_TYPE_HARDWARE, PERF_COUNT_HW_INSTRUCTIONS); }
-
-static inline int perf_event_task_clock(void) { return perf_open_event(PERF_TYPE_SOFTWARE, PERF_COUNT_SW_TASK_CLOCK); }
-
-static inline int perf_event_page_faults(void) { return perf_open_event(PERF_TYPE_SOFTWARE, PERF_COUNT_SW_PAGE_FAULTS); }
-
-static inline int perf_event_dtlb_access(void) {
-    return perf_open_event(PERF_TYPE_HW_CACHE, PERF_COUNT_HW_CACHE_DTLB | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16));
-}
-
-static inline int perf_event_dtlb_miss(void) { return perf_open_event(PERF_TYPE_HW_CACHE, PERF_COUNT_HW_CACHE_DTLB | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16)); }
-
-static inline int perf_event_l1d_access(void) { return perf_open_event(PERF_TYPE_HW_CACHE, PERF_COUNT_HW_CACHE_L1D | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16)); }
-
-static inline int perf_event_l1d_miss(void) { return perf_open_event(PERF_TYPE_HW_CACHE, PERF_COUNT_HW_CACHE_L1D | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16)); }
-
-static inline int perf_event_llc_access(void) { return perf_open_event(PERF_TYPE_HW_CACHE, PERF_COUNT_HW_CACHE_LL | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_ACCESS << 16)); }
-
-static inline int perf_event_llc_miss(void) { return perf_open_event(PERF_TYPE_HW_CACHE, PERF_COUNT_HW_CACHE_LL | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (PERF_COUNT_HW_CACHE_RESULT_MISS << 16)); }
-
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* PERF_H */

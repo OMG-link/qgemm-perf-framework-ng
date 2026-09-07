@@ -36,6 +36,13 @@ struct OwnedIQ2_XXSQ8_KInput {
 using OwnedBenchmarkInput = std::variant<OwnedQ4_0Q8_0Input, OwnedQ4_KQ8_KInput,
                                          OwnedIQ2_XXSQ8_KInput>;
 
+struct PerfMetricResult {
+    std::string name;
+    double min_per_iteration = 0.0;
+    double median_per_iteration = 0.0;
+    double min_running_percent = 100.0;
+};
+
 struct BenchmarkResult {
     std::string kernel_id;
     bool skipped = false;
@@ -44,6 +51,7 @@ struct BenchmarkResult {
     std::string message;
     uint64_t min_cycles = 0;
     uint64_t median_cycles = 0;
+    std::vector<PerfMetricResult> perf_metrics;
     size_t iterations = 0;
     double checksum = 0.0;
     double fma_per_cycle = 0.0;
