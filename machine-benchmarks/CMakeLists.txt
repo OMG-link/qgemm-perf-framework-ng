@@ -50,6 +50,44 @@ target_compile_options(perf-pc-semantics PRIVATE
 target_link_options(perf-pc-semantics PRIVATE -no-pie)
 target_link_libraries(perf-pc-semantics PRIVATE pthread)
 
+add_executable(prefetch-threshold
+    prefetch_threshold.cpp
+    prefetch_threshold.S
+)
+target_compile_features(prefetch-threshold PRIVATE cxx_std_20)
+target_compile_options(prefetch-threshold PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+)
+target_link_libraries(prefetch-threshold PRIVATE pthread)
+
+add_executable(prefetch-multistream
+    prefetch_multistream.cpp
+    prefetch_multistream.S
+)
+target_compile_features(prefetch-multistream PRIVATE cxx_std_20)
+target_compile_options(prefetch-multistream PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+)
+target_link_libraries(prefetch-multistream PRIVATE pthread)
+
+add_executable(dpu-cb-prefetch
+    dpu_cb_prefetch.cpp
+    dpu_cb_prefetch.S
+)
+target_compile_features(dpu-cb-prefetch PRIVATE cxx_std_20)
+target_compile_options(dpu-cb-prefetch PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+    "SHELL:-mllvm -riscv-v-vector-bits-min=256"
+    "SHELL:-mllvm -riscv-v-vector-bits-max=256"
+)
+target_link_libraries(dpu-cb-prefetch PRIVATE pthread)
+
 add_executable(k1-memory-path-bandwidth
     k1_memory_path_bandwidth.cpp
     k1_memory_path_load.S
