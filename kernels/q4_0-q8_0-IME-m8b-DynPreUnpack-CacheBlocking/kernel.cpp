@@ -5,7 +5,6 @@
 
 #include "kernel.h"
 #include "rvv_vl.h"
-#include "types.h"
 
 #define REPEAT_8(operation, ...)                                                                                                                                                                       \
     operation(0, __VA_ARGS__) operation(1, __VA_ARGS__) operation(2, __VA_ARGS__) operation(3, __VA_ARGS__) operation(4, __VA_ARGS__) operation(5, __VA_ARGS__) operation(6, __VA_ARGS__)              \
@@ -47,13 +46,12 @@ constexpr int kVmadotSignedness = 0;
     }
 }
 
-void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_CacheBlocking(const uint8_t *GGML_RESTRICT baseA, const int8_t *GGML_RESTRICT baseWQs,
-                                                                                           const uint16_t *GGML_RESTRICT baseWScales, float *GGML_RESTRICT baseC, size_t BlockCountK, const size_t ldc,
-                                                                                           bool firstKc) {
+void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_CacheBlocking(const int8_t *GGML_RESTRICT baseAQs, const float *GGML_RESTRICT baseAScales,
+                                                                                           const int8_t *GGML_RESTRICT baseWQs, const uint16_t *GGML_RESTRICT baseWScales, float *GGML_RESTRICT baseC,
+                                                                                           size_t BlockCountK, const size_t ldc, bool firstKc) {
 
     const size_t numKIter = kBlockLength / kStepKPerIter;
 
-    auto baseBlockA = (const block_q8_0_ime_m8 *)baseA;
     float *rowC = baseC;
     float acc[kOutputM * kOutputN];
     bool firstReductionFlush = true;
@@ -89,11 +87,11 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
             vint8m1_t bHi3i = __riscv_vget_v_i8m8_i8m1(unpackedB, 6);
             vint8m1_t bHi4i = __riscv_vget_v_i8m8_i8m1(unpackedB, 7);
 
-            vint8m1_t A1 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[inner * kABytesPerKIter], vl8);
-            vint8m1_t A2 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[inner * kABytesPerKIter + kBytesPerMIV], vl8);
-
-            vint8m1_t A3 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[inner * kABytesPerKIter + 2 * kBytesPerMIV], vl8);
-            vint8m1_t A4 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[inner * kABytesPerKIter + 3 * kBytesPerMIV], vl8);
+            const int8_t *aInner = baseAQs + bk * kMr * QK8_0 + inner * kABytesPerKIter;
+            vint8m1_t A1 = __riscv_vle8_v_i8m1(aInner, vl8);
+            vint8m1_t A2 = __riscv_vle8_v_i8m1(aInner + kBytesPerMIV, vl8);
+            vint8m1_t A3 = __riscv_vle8_v_i8m1(aInner + 2 * kBytesPerMIV, vl8);
+            vint8m1_t A4 = __riscv_vle8_v_i8m1(aInner + 3 * kBytesPerMIV, vl8);
 
             asm volatile("" : : "vr"(bLo1i), "vr"(bLo2i), "vr"(bLo3i), "vr"(bLo4i), "vr"(bHi1i), "vr"(bHi2i), "vr"(bHi3i), "vr"(bHi4i), "vr"(A1), "vr"(A2), "vr"(A3), "vr"(A4));
 
@@ -161,7 +159,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
     {                                                                                                                                                                                                  \
         vint32m2_t component_i = __riscv_vle32_v_i32m2(component + index * kOutputN, ime::rvv::vl(32, 2));                                                                                             \
         vfloat32m2_t component_f = __riscv_vfcvt_f_x_v_f32m2(component_i, ime::rvv::vl(32, 2));                                                                                                        \
-        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseBlockA[reductionBlock].d[index], ime::rvv::vl(32, 2));                                                                                   \
+        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseAScales[reductionBlock * kMr + index], ime::rvv::vl(32, 2));                                                                             \
         reduction_acc##index = __riscv_vfmacc_vv_f32m2(reduction_acc##index, component_f, abscale, ime::rvv::vl(32, 2));                                                                               \
     }
 #define REDUCTION_BARRIER(index0, index1, index2, index3)                                                                                                                                              \

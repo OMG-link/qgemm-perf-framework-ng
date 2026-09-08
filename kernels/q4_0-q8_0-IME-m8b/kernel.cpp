@@ -4,18 +4,11 @@
 #include <smt_vector.h>
 
 #include "kernel.h"
-#include "types.h"
 #include "rvv_vl.h"
 
-#define REPEAT_8(operation, ...)                                                                                         \
-    operation(0, __VA_ARGS__)                                                                                           \
-    operation(1, __VA_ARGS__)                                                                                           \
-    operation(2, __VA_ARGS__)                                                                                           \
-    operation(3, __VA_ARGS__)                                                                                           \
-    operation(4, __VA_ARGS__)                                                                                           \
-    operation(5, __VA_ARGS__)                                                                                           \
-    operation(6, __VA_ARGS__)                                                                                           \
-    operation(7, __VA_ARGS__)
+#define REPEAT_8(operation, ...)                                                                                                                                                                       \
+    operation(0, __VA_ARGS__) operation(1, __VA_ARGS__) operation(2, __VA_ARGS__) operation(3, __VA_ARGS__) operation(4, __VA_ARGS__) operation(5, __VA_ARGS__) operation(6, __VA_ARGS__)              \
+        operation(7, __VA_ARGS__)
 
 constexpr size_t kMr = 8;
 constexpr size_t kNr = 16;
@@ -32,13 +25,10 @@ constexpr size_t kRedBatchSize = 8;
 constexpr int kVmadotMode = 3;
 constexpr int kVmadotSignedness = 0;
 
-void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *GGML_RESTRICT baseA, const uint8_t *GGML_RESTRICT baseWQs,
-                                                                const uint16_t *GGML_RESTRICT baseWScales, float *GGML_RESTRICT baseC, size_t CountN,
-                                                                size_t BlockCountK, const size_t ldc) {
+void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const int8_t *GGML_RESTRICT baseAQs, const float *GGML_RESTRICT baseAScales, const uint8_t *GGML_RESTRICT baseWQs,
+                                                                const uint16_t *GGML_RESTRICT baseWScales, float *GGML_RESTRICT baseC, size_t CountN, size_t BlockCountK, const size_t ldc) {
 
     const size_t numKIter = kBlockLength / kStepKPerIter;
-
-    auto baseBlockA = (const block_q8_0_ime_m8 *)baseA;
     for (size_t n = 0; n < CountN; n += kOutputN) {
         float *rowC = baseC + n;
 
@@ -47,6 +37,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
         size_t reductionCount = 0;
         for (size_t bk = 0; bk < BlockCountK;) {
             const size_t blockWIndex = (n / kOutputN) * BlockCountK + bk;
+            const int8_t *blockAQs = baseAQs + bk * kMr * QK8_0;
 
             vint32m2_t inner_acc0 = __riscv_vmv_v_x_i32m2(0, 16);
             vint32m2_t inner_acc1 = __riscv_vmv_v_x_i32m2(0, 16);
@@ -86,11 +77,11 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
                 vint8m1_t bHi3i = __riscv_vadd_vx_i8m1(__riscv_vreinterpret_v_u8m1_i8m1(bHi3), kQuantizationZeroPoint, vl8);
                 vint8m1_t bHi4i = __riscv_vadd_vx_i8m1(__riscv_vreinterpret_v_u8m1_i8m1(bHi4), kQuantizationZeroPoint, vl8);
 
-                vint8m1_t A1 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[inner * kABytesPerKIter], vl8);
-                vint8m1_t A2 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[inner * kABytesPerKIter + kBytesPerMIV], vl8);
+                vint8m1_t A1 = __riscv_vle8_v_i8m1(blockAQs + inner * kABytesPerKIter, vl8);
+                vint8m1_t A2 = __riscv_vle8_v_i8m1(blockAQs + inner * kABytesPerKIter + kBytesPerMIV, vl8);
 
-                vint8m1_t A3 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[kASecondBlockOffset + inner * kABytesPerKIter], vl8);
-                vint8m1_t A4 = __riscv_vle8_v_i8m1(&baseBlockA[bk].qs[kASecondBlockOffset + inner * kABytesPerKIter + kBytesPerMIV], vl8);
+                vint8m1_t A3 = __riscv_vle8_v_i8m1(blockAQs + kASecondBlockOffset + inner * kABytesPerKIter, vl8);
+                vint8m1_t A4 = __riscv_vle8_v_i8m1(blockAQs + kASecondBlockOffset + inner * kABytesPerKIter + kBytesPerMIV, vl8);
 
                 asm volatile("" : : "vr"(bLo1i), "vr"(bLo2i), "vr"(bLo3i), "vr"(bLo4i), "vr"(bHi1i), "vr"(bHi2i), "vr"(bHi3i), "vr"(bHi4i), "vr"(A1), "vr"(A2), "vr"(A3), "vr"(A4));
 
@@ -122,26 +113,21 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
 
             size_t vl_mf2 = __riscv_vsetvlmax_e32mf2();
 
-#define SPLIT_ACCUMULATOR(index, unused)                                                                                 \
-    vint32m1_t acc_low##index = __riscv_vget_v_i32m2_i32m1(inner_acc##index, 0);                                        \
+#define SPLIT_ACCUMULATOR(index, unused)                                                                                                                                                               \
+    vint32m1_t acc_low##index = __riscv_vget_v_i32m2_i32m1(inner_acc##index, 0);                                                                                                                       \
     vint32m1_t acc_high##index = __riscv_vget_v_i32m2_i32m1(inner_acc##index, 1);
-#define STORE_LOW(index, unused)                                                                                         \
-    __riscv_vse32_v_i32mf2(component + (index / 4) * 4 * kOutputN + (index % 4) * 4,                                    \
-                            __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_low##index), vl_mf2);                                 \
-    __riscv_vse32_v_i32mf2(component + (index / 4) * 4 * kOutputN + 2 * kOutputN + (index % 4) * 4,                      \
-                            __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_high##index), vl_mf2);
-#define STORE_HIGH(index, unused)                                                                                        \
-    __riscv_vse32_v_i32m1_m(mask32_4, component + (index / 4) * 4 * kOutputN + (index % 4) * 4 + 12,                    \
-                             acc_low##index, vl_m1);                                                                      \
-    __riscv_vse32_v_i32m1_m(mask32_4,                                                                                   \
-                             component + (index / 4) * 4 * kOutputN + 2 * kOutputN + (index % 4) * 4 + 12,              \
-                             acc_high##index, vl_m1);
+#define STORE_LOW(index, unused)                                                                                                                                                                       \
+    __riscv_vse32_v_i32mf2(component + (index / 4) * 4 * kOutputN + (index % 4) * 4, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_low##index), vl_mf2);                                                      \
+    __riscv_vse32_v_i32mf2(component + (index / 4) * 4 * kOutputN + 2 * kOutputN + (index % 4) * 4, __riscv_vlmul_trunc_v_i32m1_i32mf2(acc_high##index), vl_mf2);
+#define STORE_HIGH(index, unused)                                                                                                                                                                      \
+    __riscv_vse32_v_i32m1_m(mask32_4, component + (index / 4) * 4 * kOutputN + (index % 4) * 4 + 12, acc_low##index, vl_m1);                                                                           \
+    __riscv_vse32_v_i32m1_m(mask32_4, component + (index / 4) * 4 * kOutputN + 2 * kOutputN + (index % 4) * 4 + 12, acc_high##index, vl_m1);
 #define KEEP_LIVE(index, unused) , "vr"(acc_low##index), "vr"(acc_high##index)
 
             REPEAT_8(SPLIT_ACCUMULATOR, _)
             REPEAT_8(STORE_LOW, _)
 
-            asm volatile("" : : "r"(component) REPEAT_8(KEEP_LIVE, _));
+            asm volatile("" : : "r"(component)REPEAT_8(KEEP_LIVE, _));
 
             REPEAT_8(STORE_HIGH, _)
 
@@ -154,37 +140,30 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const uint8_t *G
             reductionCount++;
             if (reductionCount == kRedBatchSize or bk == BlockCountK) {
                 const size_t reductionBlockStart = bk - reductionCount;
-#define LOAD_REDUCTION_ACCUMULATOR(index, unused)                                                                        \
-    vfloat32m2_t reduction_acc##index = __riscv_vle32_v_f32m2(acc + index * kOutputN, ime::rvv::vl(32, 2));
-#define REDUCE_ROW(index, unused)                                                                                         \
-    {                                                                                                                    \
-        vint32m2_t component_i = __riscv_vle32_v_i32m2(component + index * kOutputN, ime::rvv::vl(32, 2));                         \
-        vfloat32m2_t component_f = __riscv_vfcvt_f_x_v_f32m2(component_i, ime::rvv::vl(32, 2));                                   \
-        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseBlockA[reductionBlock].d[index], ime::rvv::vl(32, 2));               \
-        reduction_acc##index = __riscv_vfmacc_vv_f32m2(reduction_acc##index, component_f, abscale, ime::rvv::vl(32, 2));           \
+#define LOAD_REDUCTION_ACCUMULATOR(index, unused) vfloat32m2_t reduction_acc##index = __riscv_vle32_v_f32m2(acc + index * kOutputN, ime::rvv::vl(32, 2));
+#define REDUCE_ROW(index, unused)                                                                                                                                                                      \
+    {                                                                                                                                                                                                  \
+        vint32m2_t component_i = __riscv_vle32_v_i32m2(component + index * kOutputN, ime::rvv::vl(32, 2));                                                                                             \
+        vfloat32m2_t component_f = __riscv_vfcvt_f_x_v_f32m2(component_i, ime::rvv::vl(32, 2));                                                                                                        \
+        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseAScales[reductionBlock * kMr + index], ime::rvv::vl(32, 2));                                                                             \
+        reduction_acc##index = __riscv_vfmacc_vv_f32m2(reduction_acc##index, component_f, abscale, ime::rvv::vl(32, 2));                                                                               \
     }
-#define REDUCTION_BARRIER(index0, index1, index2, index3)                                                                \
-    asm volatile(""                                                                                                      \
-                 : "+vr"(reduction_acc##index0), "+vr"(reduction_acc##index1), "+vr"(reduction_acc##index2),           \
-                   "+vr"(reduction_acc##index3)                                                                          \
-                 :                                                                                                       \
-                 : "memory");
-#define REDUCE_ROW_QUAD(index0, index1, index2, index3)                                                                  \
-    REDUCE_ROW(index0, _)                                                                                                \
-    REDUCE_ROW(index1, _)                                                                                                \
-    REDUCE_ROW(index2, _)                                                                                                \
-    REDUCE_ROW(index3, _)                                                                                                \
+#define REDUCTION_BARRIER(index0, index1, index2, index3)                                                                                                                                              \
+    asm volatile("" : "+vr"(reduction_acc##index0), "+vr"(reduction_acc##index1), "+vr"(reduction_acc##index2), "+vr"(reduction_acc##index3) : : "memory");
+#define REDUCE_ROW_QUAD(index0, index1, index2, index3)                                                                                                                                                \
+    REDUCE_ROW(index0, _)                                                                                                                                                                              \
+    REDUCE_ROW(index1, _)                                                                                                                                                                              \
+    REDUCE_ROW(index2, _)                                                                                                                                                                              \
+    REDUCE_ROW(index3, _)                                                                                                                                                                              \
     REDUCTION_BARRIER(index0, index1, index2, index3)
-#define STORE_REDUCTION_ACCUMULATOR(index, unused)                                                                       \
-    __riscv_vse32_v_f32m2(acc + index * kOutputN, reduction_acc##index, ime::rvv::vl(32, 2));
+#define STORE_REDUCTION_ACCUMULATOR(index, unused) __riscv_vse32_v_f32m2(acc + index * kOutputN, reduction_acc##index, ime::rvv::vl(32, 2));
 
                 REPEAT_8(LOAD_REDUCTION_ACCUMULATOR, _)
 
                 for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
                     const size_t reductionBlock = reductionBlockStart + reductionIndex;
                     const int32_t *component = reduction_components + reductionIndex * kOutputM * kOutputN;
-                    vfloat16m1_t bsh = __riscv_vle16_v_f16m1(
-                        (_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), ime::rvv::vl(16, 1));
+                    vfloat16m1_t bsh = __riscv_vle16_v_f16m1((_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), ime::rvv::vl(16, 1));
                     vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, ime::rvv::vl(16, 1));
 
                     REDUCE_ROW_QUAD(0, 1, 2, 3)
