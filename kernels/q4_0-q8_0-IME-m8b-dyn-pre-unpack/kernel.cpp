@@ -21,8 +21,7 @@ constexpr size_t kPackedBBytesPerKIter = 4 * kBytesPerMIV;
 constexpr size_t kUnpackedBBytesPerKIter = 8 * kBytesPerMIV;
 constexpr size_t kPackedBBytesPerBlock = 16 * (QK4_0 / 2);
 constexpr size_t kUnpackedBBytesPerBlock = 16 * QK4_0;
-constexpr size_t kABytesPerKIter = 2 * kBytesPerMIV;
-constexpr size_t kASecondBlockOffset = 2 * kABytesPerKIter;
+constexpr size_t kABytesPerKIter = 4 * kBytesPerMIV;
 constexpr int8_t kQuantizationZeroPoint = -8;
 constexpr size_t kRedBatchSize = 8;
 constexpr int kVmadotMode = 3;
@@ -89,11 +88,11 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack(con
                 vint8m1_t bHi3i = __riscv_vget_v_i8m8_i8m1(unpackedB, 6);
                 vint8m1_t bHi4i = __riscv_vget_v_i8m8_i8m1(unpackedB, 7);
 
-                vint8m1_t A1 = __riscv_vle8_v_i8m1(blockAQs + inner * kABytesPerKIter, vl8);
-                vint8m1_t A2 = __riscv_vle8_v_i8m1(blockAQs + inner * kABytesPerKIter + kBytesPerMIV, vl8);
-
-                vint8m1_t A3 = __riscv_vle8_v_i8m1(blockAQs + kASecondBlockOffset + inner * kABytesPerKIter, vl8);
-                vint8m1_t A4 = __riscv_vle8_v_i8m1(blockAQs + kASecondBlockOffset + inner * kABytesPerKIter + kBytesPerMIV, vl8);
+                const int8_t *aInner = blockAQs + inner * kABytesPerKIter;
+                vint8m1_t A1 = __riscv_vle8_v_i8m1(aInner, vl8);
+                vint8m1_t A2 = __riscv_vle8_v_i8m1(aInner + kBytesPerMIV, vl8);
+                vint8m1_t A3 = __riscv_vle8_v_i8m1(aInner + 2 * kBytesPerMIV, vl8);
+                vint8m1_t A4 = __riscv_vle8_v_i8m1(aInner + 3 * kBytesPerMIV, vl8);
 
                 asm volatile("" : : "vr"(bLo1i), "vr"(bLo2i), "vr"(bLo3i), "vr"(bLo4i), "vr"(bHi1i), "vr"(bHi2i), "vr"(bHi3i), "vr"(bHi4i), "vr"(A1), "vr"(A2), "vr"(A3), "vr"(A4));
 

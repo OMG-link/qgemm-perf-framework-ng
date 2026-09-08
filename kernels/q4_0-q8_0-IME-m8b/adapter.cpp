@@ -13,6 +13,7 @@ namespace {
 constexpr size_t kMr = 8;
 constexpr size_t kAQuantBytesPerBlock = kMr * QK8_0;
 constexpr size_t kAScalesPerBlock = kMr;
+constexpr size_t kPackedAChunkOrder[kMr] = {0, 1, 4, 5, 2, 3, 6, 7};
 constexpr size_t kCacheLineBytes = 64;
 static_assert(kAQuantBytesPerBlock == 256);
 static_assert(sizeof(block_q8_0_ime_m8) == 288);
@@ -49,7 +50,9 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
     state->packed_a_scales = align_to_cache_line(state->packed_a_scales_storage, scale_bytes);
 
     for (size_t block = 0; block < packed_block_count; ++block) {
-        std::copy_n(m_major_a[block].qs, kAQuantBytesPerBlock, state->packed_a_qs + block * kAQuantBytesPerBlock);
+        for (size_t packed_chunk = 0; packed_chunk < kMr; ++packed_chunk) {
+            std::copy_n(m_major_a[block].qs + kPackedAChunkOrder[packed_chunk] * QK8_0, QK8_0, state->packed_a_qs + block * kAQuantBytesPerBlock + packed_chunk * QK8_0);
+        }
         std::copy_n(m_major_a[block].d, kAScalesPerBlock, state->packed_a_scales + block * kAScalesPerBlock);
     }
     return {state.release(), {}};
