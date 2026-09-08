@@ -4,6 +4,7 @@
 #include <smt_vector.h>
 
 #include "kernel.h"
+#include "l1d_load_miss_probe.h"
 #include "rvv_vl.h"
 
 #define REPEAT_8(operation, ...)                                                                                                                                                                       \
@@ -52,10 +53,10 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const int8_t *GG
 
                 size_t vl8 = __riscv_vsetvlmax_e8m1();
                 const uint8_t *blockWQs = baseWQs + blockWIndex * 16 * (QK4_0 / 2);
-                vuint8m1_t bPacked1 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 0 * kBytesPerMIV, vl8);
-                vuint8m1_t bPacked2 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 1 * kBytesPerMIV, vl8);
-                vuint8m1_t bPacked3 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 2 * kBytesPerMIV, vl8);
-                vuint8m1_t bPacked4 = __riscv_vle8_v_u8m1(blockWQs + inner * kBBytesPerKIter + 3 * kBytesPerMIV, vl8);
+                IME_L1D_PROBE_VLE8_M1(vuint8m1_t, bPacked1, blockWQs + inner * kBBytesPerKIter + 0 * kBytesPerMIV, ime_l1d_probe_m8b_w_main_0);
+                IME_L1D_PROBE_VLE8_M1(vuint8m1_t, bPacked2, blockWQs + inner * kBBytesPerKIter + 1 * kBytesPerMIV, ime_l1d_probe_m8b_w_main_1);
+                IME_L1D_PROBE_VLE8_M1(vuint8m1_t, bPacked3, blockWQs + inner * kBBytesPerKIter + 2 * kBytesPerMIV, ime_l1d_probe_m8b_w_main_2);
+                IME_L1D_PROBE_VLE8_M1(vuint8m1_t, bPacked4, blockWQs + inner * kBBytesPerKIter + 3 * kBytesPerMIV, ime_l1d_probe_m8b_w_main_3);
 
                 vuint8m1_t bLo1 = __riscv_vand_vx_u8m1(bPacked1, 15, vl8);
                 vuint8m1_t bLo2 = __riscv_vand_vx_u8m1(bPacked2, 15, vl8);
@@ -77,10 +78,10 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const int8_t *GG
                 vint8m1_t bHi4i = __riscv_vadd_vx_i8m1(__riscv_vreinterpret_v_u8m1_i8m1(bHi4), kQuantizationZeroPoint, vl8);
 
                 const int8_t *aInner = blockAQs + inner * kABytesPerKIter;
-                vint8m1_t A1 = __riscv_vle8_v_i8m1(aInner, vl8);
-                vint8m1_t A2 = __riscv_vle8_v_i8m1(aInner + kBytesPerMIV, vl8);
-                vint8m1_t A3 = __riscv_vle8_v_i8m1(aInner + 2 * kBytesPerMIV, vl8);
-                vint8m1_t A4 = __riscv_vle8_v_i8m1(aInner + 3 * kBytesPerMIV, vl8);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A1, aInner, ime_l1d_probe_m8b_a_main_0);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A2, aInner + kBytesPerMIV, ime_l1d_probe_m8b_a_main_1);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A3, aInner + 2 * kBytesPerMIV, ime_l1d_probe_m8b_a_main_2);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A4, aInner + 3 * kBytesPerMIV, ime_l1d_probe_m8b_a_main_3);
 
                 asm volatile("" : : "vr"(bLo1i), "vr"(bLo2i), "vr"(bLo3i), "vr"(bLo4i), "vr"(bHi1i), "vr"(bHi2i), "vr"(bHi3i), "vr"(bHi4i), "vr"(A1), "vr"(A2), "vr"(A3), "vr"(A4));
 
@@ -139,12 +140,14 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const int8_t *GG
             reductionCount++;
             if (reductionCount == kRedBatchSize or bk == BlockCountK) {
                 const size_t reductionBlockStart = bk - reductionCount;
-#define LOAD_REDUCTION_ACCUMULATOR(index, unused) vfloat32m2_t reduction_acc##index = __riscv_vle32_v_f32m2(acc + index * kOutputN, ime::rvv::vl(32, 2));
+#define LOAD_REDUCTION_ACCUMULATOR(index, unused)                                                                                                                                                      \
+    IME_L1D_PROBE_VLE32_M2(vfloat32m2_t, reduction_acc##index, acc + index * kOutputN, ime::rvv::vl(32, 2), IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_accumulator_, index));
 #define REDUCE_ROW(index, unused)                                                                                                                                                                      \
     {                                                                                                                                                                                                  \
-        vint32m2_t component_i = __riscv_vle32_v_i32m2(component + index * kOutputN, ime::rvv::vl(32, 2));                                                                                             \
+        IME_L1D_PROBE_VLE32_M2(vint32m2_t, component_i, component + index * kOutputN, ime::rvv::vl(32, 2), IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_component_, index));                                    \
         vfloat32m2_t component_f = __riscv_vfcvt_f_x_v_f32m2(component_i, ime::rvv::vl(32, 2));                                                                                                        \
-        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseAScales[reductionBlock * kMr + index], ime::rvv::vl(32, 2));                                                                             \
+        IME_L1D_PROBE_FLW(a_scale, baseAScales + reductionBlock * kMr + index, IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_a_scale_, index));                                                                  \
+        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, a_scale, ime::rvv::vl(32, 2));                                                                                                               \
         reduction_acc##index = __riscv_vfmacc_vv_f32m2(reduction_acc##index, component_f, abscale, ime::rvv::vl(32, 2));                                                                               \
     }
 #define REDUCTION_BARRIER(index0, index1, index2, index3)                                                                                                                                              \
@@ -162,7 +165,8 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const int8_t *GG
                 for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
                     const size_t reductionBlock = reductionBlockStart + reductionIndex;
                     const int32_t *component = reduction_components + reductionIndex * kOutputM * kOutputN;
-                    vfloat16m1_t bsh = __riscv_vle16_v_f16m1((_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), ime::rvv::vl(16, 1));
+                    IME_L1D_PROBE_VLE16_M1(vfloat16m1_t, bsh, (_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), ime::rvv::vl(16, 1),
+                                           ime_l1d_probe_m8b_w_scale_0);
                     vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, ime::rvv::vl(16, 1));
 
                     REDUCE_ROW_QUAD(0, 1, 2, 3)
