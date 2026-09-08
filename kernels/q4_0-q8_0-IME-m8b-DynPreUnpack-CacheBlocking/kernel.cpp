@@ -154,10 +154,16 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
             const bool finalReductionFlush = bk == BlockCountK;
 #define DECLARE_REDUCTION_ACCUMULATOR(index, unused) vfloat32m2_t reduction_acc##index;
 #define ZERO_REDUCTION_ACCUMULATOR(index, unused) reduction_acc##index = __riscv_vfmv_v_f_f32m2(0.0f, ime::rvv::vl(32, 2));
-#define LOAD_C_REDUCTION_ACCUMULATOR(index, unused)                                                                                                                                                    \
-    IME_L1D_PROBE_VLE32_M2(vfloat32m2_t, reduction_acc##index, rowC + index * ldc, ime::rvv::vl(32, 2), IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_cb_c_accumulator_, index));
-#define LOAD_LOCAL_REDUCTION_ACCUMULATOR(index, unused)                                                                                                                                                \
-    IME_L1D_PROBE_VLE32_M2(vfloat32m2_t, reduction_acc##index, acc + index * kOutputN, ime::rvv::vl(32, 2), IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_cb_local_accumulator_, index));
+#define LOAD_8_REDUCTION_ACCUMULATORS(address, stride, symbol_prefix)                                                                                                                                  \
+    asm volatile(IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 0), "vl2re32.v %0, (%8)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 1), "vl2re32.v %1, (%9)")                             \
+                     IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 2), "vl2re32.v %2, (%10)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 3), "vl2re32.v %3, (%11)")                       \
+                         IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 4), "vl2re32.v %4, (%12)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 5), "vl2re32.v %5, (%13)")                   \
+                             IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 6), "vl2re32.v %6, (%14)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 7), "vl2re32.v %7, (%15)")               \
+                 : "=&vr"(reduction_acc0), "=&vr"(reduction_acc1), "=&vr"(reduction_acc2), "=&vr"(reduction_acc3), "=&vr"(reduction_acc4), "=&vr"(reduction_acc5), "=&vr"(reduction_acc6),             \
+                   "=&vr"(reduction_acc7)                                                                                                                                                              \
+                 : "r"((address) + 0 * (stride)), "r"((address) + 1 * (stride)), "r"((address) + 2 * (stride)), "r"((address) + 3 * (stride)), "r"((address) + 4 * (stride)),                          \
+                   "r"((address) + 5 * (stride)), "r"((address) + 6 * (stride)), "r"((address) + 7 * (stride))                                                                                         \
+                 : "memory");
 #define REDUCE_ROW(index, unused)                                                                                                                                                                      \
     {                                                                                                                                                                                                  \
         IME_L1D_PROBE_VLE32_M2(vint32m2_t, component_i, component + index * kOutputN, ime::rvv::vl(32, 2), IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_cb_component_, index));                                 \
@@ -185,10 +191,10 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
                 if (firstKc) {
                     REPEAT_8(ZERO_REDUCTION_ACCUMULATOR, _)
                 } else {
-                    REPEAT_8(LOAD_C_REDUCTION_ACCUMULATOR, _)
+                    LOAD_8_REDUCTION_ACCUMULATORS(rowC, ldc, ime_l1d_probe_m8b_cb_c_accumulator_)
                 }
             } else {
-                REPEAT_8(LOAD_LOCAL_REDUCTION_ACCUMULATOR, _)
+                LOAD_8_REDUCTION_ACCUMULATORS(acc, kOutputN, ime_l1d_probe_m8b_cb_local_accumulator_)
             }
 
             for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
@@ -208,8 +214,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
 #undef REDUCE_ROW_QUAD
 #undef REDUCTION_BARRIER
 #undef REDUCE_ROW
-#undef LOAD_LOCAL_REDUCTION_ACCUMULATOR
-#undef LOAD_C_REDUCTION_ACCUMULATOR
+#undef LOAD_8_REDUCTION_ACCUMULATORS
 #undef ZERO_REDUCTION_ACCUMULATOR
 #undef DECLARE_REDUCTION_ACCUMULATOR
             reductionCount = 0;
