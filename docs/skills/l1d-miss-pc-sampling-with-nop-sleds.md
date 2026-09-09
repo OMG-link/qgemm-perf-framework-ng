@@ -20,3 +20,4 @@ Key details:
 - NOPs give prefetchers more time and can change cache behavior. Compare total miss counts before and after instrumentation, and repeat with different sled lengths to determine whether the attribution still represents the original kernel.
 - Samples accumulating near the sled tail or in the next sled indicate that the sled is too short. Once samples consistently remain near the front, a longer sled only adds perturbation.
 - A PMU missed-load event is not a cache-line count; loads crossing lines and multiple loads sharing one line are especially easy to misinterpret.
+- On RISC-V, explicitly disable RVC for the sled and derive its range from the final ELF, because `nop` may otherwise assemble to a 2-byte compressed instruction and invalidate source-count-based PC attribution.
