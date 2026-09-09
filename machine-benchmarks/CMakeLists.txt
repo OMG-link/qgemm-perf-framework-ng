@@ -88,6 +88,21 @@ target_compile_options(dpu-cb-prefetch PRIVATE
 )
 target_link_libraries(dpu-cb-prefetch PRIVATE pthread)
 
+add_executable(m8b-aw-miss
+    m8b_aw_miss.cpp
+    m8b_aw_miss.S
+)
+target_compile_features(m8b-aw-miss PRIVATE cxx_std_20)
+target_compile_options(m8b-aw-miss PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+    "SHELL:-mllvm -riscv-v-vector-bits-min=256"
+    "SHELL:-mllvm -riscv-v-vector-bits-max=256"
+)
+target_link_options(m8b-aw-miss PRIVATE -no-pie)
+target_link_libraries(m8b-aw-miss PRIVATE pthread)
+
 add_executable(k1-memory-path-bandwidth
     k1_memory_path_bandwidth.cpp
     k1_memory_path_load.S
