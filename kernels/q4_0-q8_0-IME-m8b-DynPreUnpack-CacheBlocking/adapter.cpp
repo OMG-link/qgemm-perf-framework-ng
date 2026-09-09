@@ -31,6 +31,7 @@ struct M8DynPreUnpackCacheBlockingState : CommonState {
     float *packed_a_scales = nullptr;
     std::vector<uint8_t> packed_b_qs;
     std::vector<uint16_t> packed_b_scales;
+    std::vector<float> packed_c;
 };
 
 template <typename T> T *align_to_cache_line(std::vector<T> &storage, size_t payload_bytes) {
@@ -46,6 +47,8 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
 
     const size_t blocks_k = state->blocks_k();
     const size_t tiles_m = state->m() / kMr;
+    const size_t tiles_n = state->n() / kNr;
+    state->packed_c.resize(tiles_m * tiles_n * kMr * kNr);
     auto m_major_a = std::move(state->packed_a_m8);
 
     const size_t packed_block_count = m_major_a.size();
@@ -77,6 +80,8 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
 void run(KernelState opaque, size_t iterations) noexcept {
     auto &state = *static_cast<M8DynPreUnpackCacheBlockingState *>(opaque);
     const size_t blocks_k = state.blocks_k();
+    const size_t tiles_m = state.m() / kMr;
+    const size_t tiles_n = state.n() / kNr;
 
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
         std::unique_ptr<int8_t[]> unpacked_b{new int8_t[state.n() * state.k()]};
@@ -90,7 +95,6 @@ void run(KernelState opaque, size_t iterations) noexcept {
             }
         }
 
-        const size_t tiles_m = state.m() / kMr;
         for (size_t block_k = 0; block_k < blocks_k; block_k += kBlocksPerPanel) {
             const size_t local_blocks = std::min(kBlocksPerPanel, blocks_k - block_k);
             const size_t panel_base = block_k * tiles_m;
@@ -108,9 +112,21 @@ void run(KernelState opaque, size_t iterations) noexcept {
                         const size_t a_block = panel_base + tile_m * local_blocks;
                         const int8_t *a_qs = state.packed_a_qs + a_block * kAQuantBytesPerBlock;
                         const float *a_scales = state.packed_a_scales + a_block * kAScalesPerBlock;
-                        SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_CacheBlocking(
-                            a_qs, a_scales, unpacked_panel, panel_scales, state.output().data() + tile_m * kMr * state.n() + tile_n, local_blocks, state.n(), block_k == 0);
+                        const size_t tile_n_index = tile_n / kNr;
+                        float *packed_c_tile = state.packed_c.data() + (tile_m * tiles_n + tile_n_index) * kMr * kNr;
+                        SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_CacheBlocking(a_qs, a_scales, unpacked_panel, panel_scales, packed_c_tile, local_blocks, kNr,
+                                                                                                              block_k == 0);
                     }
+                }
+            }
+        }
+
+        for (size_t tile_m = 0; tile_m < tiles_m; ++tile_m) {
+            for (size_t tile_n_index = 0; tile_n_index < tiles_n; ++tile_n_index) {
+                const float *packed_c_tile = state.packed_c.data() + (tile_m * tiles_n + tile_n_index) * kMr * kNr;
+                float *output_tile = state.output().data() + tile_m * kMr * state.n() + tile_n_index * kNr;
+                for (size_t row = 0; row < kMr; ++row) {
+                    std::copy_n(packed_c_tile + row * kNr, kNr, output_tile + row * state.n());
                 }
             }
         }
