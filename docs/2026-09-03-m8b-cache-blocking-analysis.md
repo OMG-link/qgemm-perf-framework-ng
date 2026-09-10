@@ -264,16 +264,16 @@ Cache Blocking 比未分块 DynPreUnpack 少 13.71% cycles，说明分块复用�
 
 | 组分 | m8b | m8b-DPU | m8b-DPU-CB |
 |---|---:|---:|---:|
-| 动态预解压 | — | 8.290M cycles | 7.667M cycles |
-| Inner loop | — | 51.649M cycles | 44.320M cycles |
-| Inner loop output writeback | — | 42.144M cycles | 37.359M cycles |
-| Batch reduction | — | 37.616M cycles | 37.423M cycles |
-| 最终 C writeback | — | 6.745M cycles | 计入 batch reduction |
-| Unpack C | — | 0.000M cycles | 2.284M cycles |
-| 其他执行与控制开销 | — | 8.808M cycles | 4.957M cycles |
+| 动态预解压 | 0.000M cycles | 8.290M cycles | 7.667M cycles |
+| Inner loop | 45.596M cycles | 51.649M cycles | 44.320M cycles |
+| Inner loop output writeback | 37.746M cycles | 42.144M cycles | 37.359M cycles |
+| Batch reduction | 33.369M cycles | 37.616M cycles | 37.423M cycles |
+| 最终 C writeback | 6.387M cycles | 6.745M cycles | 计入 batch reduction |
+| Unpack C | 0.000M cycles | 0.000M cycles | 2.284M cycles |
+| 其他执行与控制开销 | 2.255M cycles | 8.808M cycles | 4.957M cycles |
 | **合计** | **125.360M cycles** | **155.441M cycles** | **134.128M cycles** |
 
-（待进一步分析）
+三列组分均来自同一 ELF 的五次 `cpu-clock:u` PC profile，并按各自未采样端到端 cycles 缩放；表中每个组分分别取五次估计的中位数，因此分项四舍五入后的和不要求严格等于合计。基础 m8b 的采样运行中位数为 128.778M cycles，相对未采样结果增加 2.73%。
 
 ## 4. 结论
 
