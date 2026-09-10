@@ -21,6 +21,20 @@ target_compile_options(dynpreunpack-inner-loop PRIVATE
 )
 target_link_libraries(dynpreunpack-inner-loop PRIVATE pthread)
 
+add_executable(m8b-inner-issue
+    m8b_inner_issue.cpp
+    m8b_inner_issue.S
+)
+target_compile_features(m8b-inner-issue PRIVATE cxx_std_20)
+target_compile_options(m8b-inner-issue PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+    "SHELL:-mllvm -riscv-v-vector-bits-min=256"
+    "SHELL:-mllvm -riscv-v-vector-bits-max=256"
+)
+target_link_libraries(m8b-inner-issue PRIVATE pthread)
+
 add_executable(dynpreunpack-full-realistic
     dynpreunpack_full_realistic.cpp
     dynpreunpack_full_realistic.S
@@ -102,6 +116,20 @@ target_compile_options(dpu-cb-prefetch PRIVATE
 )
 target_link_libraries(dpu-cb-prefetch PRIVATE pthread)
 
+add_executable(dpu-cb-inner-issue
+    dpu_cb_inner_issue.cpp
+    dpu_cb_inner_issue.S
+)
+target_compile_features(dpu-cb-inner-issue PRIVATE cxx_std_20)
+target_compile_options(dpu-cb-inner-issue PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+    "SHELL:-mllvm -riscv-v-vector-bits-min=256"
+    "SHELL:-mllvm -riscv-v-vector-bits-max=256"
+)
+target_link_libraries(dpu-cb-inner-issue PRIVATE pthread)
+
 add_executable(m8b-aw-miss
     m8b_aw_miss.cpp
     m8b_aw_miss.S
@@ -116,6 +144,18 @@ target_compile_options(m8b-aw-miss PRIVATE
 )
 target_link_options(m8b-aw-miss PRIVATE -no-pie)
 target_link_libraries(m8b-aw-miss PRIVATE pthread)
+
+add_executable(k1-memory-latency
+    k1_memory_latency.cpp
+    k1_memory_latency.S
+)
+target_compile_features(k1-memory-latency PRIVATE cxx_std_20)
+target_compile_options(k1-memory-latency PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+)
+target_link_libraries(k1-memory-latency PRIVATE pthread)
 
 add_executable(k1-memory-path-bandwidth
     k1_memory_path_bandwidth.cpp

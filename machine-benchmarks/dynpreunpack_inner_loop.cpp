@@ -16,6 +16,9 @@
 #include <unistd.h>
 #include <vector>
 
+#include <riscv_vector.h>
+#include <smt_vector.h>
+
 using Kernel = void (*)(std::size_t, const void *, const void *, void *);
 extern "C" {
 void dyn_init_operands();
@@ -24,7 +27,59 @@ void dyn_body_no_aloads(std::size_t,const void*,const void*,void*); void dyn_bod
 void dyn_body_b_fanout1(std::size_t,const void*,const void*,void*); void dyn_dep_load_dot(std::size_t,const void*,const void*,void*);
 void dyn_dep_load_base(std::size_t,const void*,const void*,void*); void dyn_dep_dot_chain(std::size_t,const void*,const void*,void*);
 void dyn_dep_dot_base(std::size_t,const void*,const void*,void*);
+void dyn_body_intrinsic_reordered_fixed_addr(std::size_t, const void *, const void *, void *);
+void dyn_body_prod_two_inner_hot_l1(std::size_t, const void *, const void *, void *);
 }
+
+extern "C" [[gnu::noinline]] void dyn_body_full_intrinsic(std::size_t iterations, const void *a_data, const void *b_data, void *out) {
+    const auto *A = static_cast<const std::int8_t *>(a_data);
+    const auto *B = static_cast<const std::int8_t *>(b_data);
+    auto *O = static_cast<std::int32_t *>(out);
+    vint32m2_t acc0 = __riscv_vmv_v_x_i32m2(0, 16), acc1 = __riscv_vmv_v_x_i32m2(0, 16);
+    vint32m2_t acc2 = __riscv_vmv_v_x_i32m2(0, 16), acc3 = __riscv_vmv_v_x_i32m2(0, 16);
+    vint32m2_t acc4 = __riscv_vmv_v_x_i32m2(0, 16), acc5 = __riscv_vmv_v_x_i32m2(0, 16);
+    vint32m2_t acc6 = __riscv_vmv_v_x_i32m2(0, 16), acc7 = __riscv_vmv_v_x_i32m2(0, 16);
+#pragma clang loop unroll(disable)
+    for (std::size_t i = 0; i < iterations; ++i) {
+        const std::size_t index = i & 63;
+        const auto *ap = A + index * 128;
+        const auto *bp = B + index * 256;
+        const vint8m8_t b = __riscv_vle8_v_i8m8(bp, __riscv_vsetvlmax_e8m8());
+        const vint8m1_t b0 = __riscv_vget_v_i8m8_i8m1(b, 0), b1 = __riscv_vget_v_i8m8_i8m1(b, 1);
+        const vint8m1_t b2 = __riscv_vget_v_i8m8_i8m1(b, 2), b3 = __riscv_vget_v_i8m8_i8m1(b, 3);
+        const vint8m1_t b4 = __riscv_vget_v_i8m8_i8m1(b, 4), b5 = __riscv_vget_v_i8m8_i8m1(b, 5);
+        const vint8m1_t b6 = __riscv_vget_v_i8m8_i8m1(b, 6), b7 = __riscv_vget_v_i8m8_i8m1(b, 7);
+        const std::size_t vl = __riscv_vsetvlmax_e8m1();
+        const vint8m1_t a0 = __riscv_vle8_v_i8m1(ap, vl), a1 = __riscv_vle8_v_i8m1(ap + 32, vl);
+        const vint8m1_t a2 = __riscv_vle8_v_i8m1(ap + 64, vl), a3 = __riscv_vle8_v_i8m1(ap + 96, vl);
+        asm volatile("" ::"vr"(b0), "vr"(b1), "vr"(b2), "vr"(b3), "vr"(b4), "vr"(b5), "vr"(b6), "vr"(b7), "vr"(a0), "vr"(a1), "vr"(a2), "vr"(a3));
+        acc0 = __riscv_smt_vmadot_i32m2(acc0, a0, b0, 3, 0);
+        acc1 = __riscv_smt_vmadot_i32m2(acc1, a0, b1, 3, 0);
+        acc2 = __riscv_smt_vmadot_i32m2(acc2, a0, b2, 3, 0);
+        acc3 = __riscv_smt_vmadot_i32m2(acc3, a0, b3, 3, 0);
+        acc4 = __riscv_smt_vmadot_i32m2(acc4, a2, b0, 3, 0);
+        acc5 = __riscv_smt_vmadot_i32m2(acc5, a2, b1, 3, 0);
+        acc6 = __riscv_smt_vmadot_i32m2(acc6, a2, b2, 3, 0);
+        acc7 = __riscv_smt_vmadot_i32m2(acc7, a2, b3, 3, 0);
+        acc0 = __riscv_smt_vmadot_i32m2(acc0, a1, b4, 3, 0);
+        acc1 = __riscv_smt_vmadot_i32m2(acc1, a1, b5, 3, 0);
+        acc2 = __riscv_smt_vmadot_i32m2(acc2, a1, b6, 3, 0);
+        acc3 = __riscv_smt_vmadot_i32m2(acc3, a1, b7, 3, 0);
+        acc4 = __riscv_smt_vmadot_i32m2(acc4, a3, b4, 3, 0);
+        acc5 = __riscv_smt_vmadot_i32m2(acc5, a3, b5, 3, 0);
+        acc6 = __riscv_smt_vmadot_i32m2(acc6, a3, b6, 3, 0);
+        acc7 = __riscv_smt_vmadot_i32m2(acc7, a3, b7, 3, 0);
+    }
+    __riscv_vse32_v_i32m2(O + 0, acc0, 16);
+    __riscv_vse32_v_i32m2(O + 16, acc1, 16);
+    __riscv_vse32_v_i32m2(O + 32, acc2, 16);
+    __riscv_vse32_v_i32m2(O + 48, acc3, 16);
+    __riscv_vse32_v_i32m2(O + 64, acc4, 16);
+    __riscv_vse32_v_i32m2(O + 80, acc5, 16);
+    __riscv_vse32_v_i32m2(O + 96, acc6, 16);
+    __riscv_vse32_v_i32m2(O + 112, acc7, 16);
+}
+
 struct Aligned { void *p{}; explicit Aligned(std::size_t n){if(posix_memalign(&p,64,n))p=nullptr;} ~Aligned(){free(p);} };
 struct Case {const char *name; Kernel fn;};
 struct PerfRead {std::uint64_t cycles, time_enabled, time_running;};
@@ -51,7 +106,18 @@ int main(int argc,char **argv){
  Aligned A(8192),B(16384),O(512); if(!A.p||!B.p||!O.p)return 1;
  for(int i=0;i<8192;i++)((std::uint8_t*)A.p)[i]=(i*17+3)&255;
  for(int i=0;i<16384;i++)((std::uint8_t*)B.p)[i]=(i*29+7)&255; std::memset(O.p,0,512);
- const std::array<Case,9> cases={{{"A_load_use",dyn_dep_load_dot},{"A_load_base",dyn_dep_load_base},{"A_dot_chain",dyn_dep_dot_chain},{"A_dot_base",dyn_dep_dot_base},{"B_full",dyn_body_full},{"B_no_bload",dyn_body_no_bload},{"B_no_aloads",dyn_body_no_aloads},{"B_b_fanout1",dyn_body_b_fanout1},{"B_no_dots",dyn_body_no_dots}}};
+ const std::array<Case, 12> cases = {{{"A_load_use", dyn_dep_load_dot},
+                                      {"A_load_base", dyn_dep_load_base},
+                                      {"A_dot_chain", dyn_dep_dot_chain},
+                                      {"A_dot_base", dyn_dep_dot_base},
+                                      {"B_full", dyn_body_full},
+                                      {"B_full_intrinsic", dyn_body_full_intrinsic},
+                                      {"B_intrinsic_reordered_fixed_addr", dyn_body_intrinsic_reordered_fixed_addr},
+                                      {"B_prod_two_inner_hot_l1", dyn_body_prod_two_inner_hot_l1},
+                                      {"B_no_bload", dyn_body_no_bload},
+                                      {"B_no_aloads", dyn_body_no_aloads},
+                                      {"B_b_fanout1", dyn_body_b_fanout1},
+                                      {"B_no_dots", dyn_body_no_dots}}};
  if(!selected.empty()&&std::none_of(cases.begin(),cases.end(),[&](const Case& c){return selected==c.name;})){std::fprintf(stderr,"unknown case: %.*s\n",int(selected.size()),selected.data());return 2;}
  const int perf_fd=open_cycles();
  if(perf_fd<0){std::fprintf(stderr,"perf_event_open cycles:u failed: %s; use --case NAME under external perf stat\n",strerror(errno));return 3;}

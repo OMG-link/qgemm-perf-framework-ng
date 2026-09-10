@@ -16,13 +16,16 @@ set(IME_ALIGNED_NEW_SOURCE
 set(IME_MACHINE_BENCHMARK_TARGETS
     k1-l2-bandwidth
     dynpreunpack-inner-loop
+    m8b-inner-issue
     dynpreunpack-full-realistic
     unpack-address-conflict
     perf-pc-semantics
     prefetch-threshold
     prefetch-multistream
     dpu-cb-prefetch
+    dpu-cb-inner-issue
     m8b-aw-miss
+    k1-memory-latency
     k1-memory-path-bandwidth)
 foreach(target IN LISTS IME_MACHINE_BENCHMARK_TARGETS)
     target_sources(${target} PRIVATE ${IME_ALIGNED_NEW_SOURCE})
