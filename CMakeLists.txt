@@ -9,6 +9,23 @@ set(IME_TUNE "spacemit-x60" CACHE STRING
 
 add_subdirectory(machine-benchmarks)
 
+set(IME_ALIGNED_NEW_SOURCE
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework/aligned_new.cpp)
+set(IME_MACHINE_BENCHMARK_TARGETS
+    k1-l2-bandwidth
+    dynpreunpack-inner-loop
+    dynpreunpack-full-realistic
+    unpack-address-conflict
+    perf-pc-semantics
+    prefetch-threshold
+    prefetch-multistream
+    dpu-cb-prefetch
+    m8b-aw-miss
+    k1-memory-path-bandwidth)
+foreach(target IN LISTS IME_MACHINE_BENCHMARK_TARGETS)
+    target_sources(${target} PRIVATE ${IME_ALIGNED_NEW_SOURCE})
+endforeach()
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_library(ime_base_compile_options INTERFACE)
@@ -209,6 +226,7 @@ endif()
 
 add_executable(ime-llama-bench
     bench/main.cpp
+    bench/framework/aligned_new.cpp
     bench/framework/kernel_registry.cpp
     bench/framework/benchmark.cpp
     bench/llama_reference/llama_reference.cpp

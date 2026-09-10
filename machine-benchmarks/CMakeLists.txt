@@ -35,6 +35,20 @@ target_compile_options(dynpreunpack-full-realistic PRIVATE
 )
 target_link_libraries(dynpreunpack-full-realistic PRIVATE pthread)
 
+add_executable(unpack-address-conflict
+    unpack_address_conflict.cpp
+    unpack_address_conflict.S
+)
+target_compile_features(unpack-address-conflict PRIVATE cxx_std_20)
+target_compile_options(unpack-address-conflict PRIVATE
+    -O3 -Wall -Wextra
+    -march=${IME_ARCH}
+    -mtune=${IME_TUNE}
+    "SHELL:-mllvm -riscv-v-vector-bits-min=256"
+    "SHELL:-mllvm -riscv-v-vector-bits-max=256"
+)
+target_link_libraries(unpack-address-conflict PRIVATE pthread)
+
 add_executable(perf-pc-semantics
     perf_pc_semantics.cpp
     perf_pc_semantics.S

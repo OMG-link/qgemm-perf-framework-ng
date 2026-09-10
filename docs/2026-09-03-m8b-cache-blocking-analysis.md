@@ -156,12 +156,12 @@ A/W main 在其它尺寸下的长稳态测试结果如下：
 
 | kernel | median cycles | FMA/cycle | 相对基础 m8b |
 |---|---:|---:|---:|
-| m8b，动态解压 | 123,744,916 | 9.1516 | baseline |
-| m8b，未分块 DynPreUnpack | 146,393,357 | 7.7357 | **+18.30% cycles** |
+| m8b，动态解压 | 125,360,000 | 9.0337 | baseline |
+| m8b，未分块 DynPreUnpack | 155,440,947 | 7.2855 | **+24.00% cycles** |
 
 ## 3. Cache Blocking：理论预期与实测结果
 
-> **本节结论：**Cache Blocking 理论上可以通过复用 W 解除 L2→L1D 带宽瓶颈，但实测性能反而进一步下降；当前实验只能确认理论预期没有兑现，尚不能充分解释原因。
+> **本节结论：**Cache Blocking 理论上可以通过复用 W 解除 L2→L1D 带宽瓶颈。实测中，它比未分块 DynPreUnpack 少 13.71% cycles，但仍比基础 m8b 多 6.99% cycles，因此理论收益只兑现了一部分。
 
 ### 3.1 分块参数的选择
 
@@ -250,39 +250,41 @@ ceil(M / MC)
 
 `3.52 B/cycle` 低于 `5.17 B/cycle`。因此分块的预期是通过在 L1D 中复用 W micro-panel，解除动态预解压造成的 L2→L1D 带宽瓶颈。
 
-### 3.3 端到端结果与理论预期相反
+### 3.3 端到端结果
 
 | kernel | median cycles | FMA/cycle | 相对基础 m8b |
 |---|---:|---:|---:|
-| 动态解压 m8b | 123,744,916 | 9.1516 | baseline |
-| 未分块 DynPreUnpack | 146,393,357 | 7.7357 | +18.30% cycles |
-| DynPreUnpack + Cache Blocking | 183,786,062 | 6.1618 | **+48.52% cycles** |
+| 动态解压 m8b | 125,360,000 | 9.0337 | baseline |
+| 未分块 DynPreUnpack | 155,440,947 | 7.2855 | **+24.00% cycles** |
+| DynPreUnpack + Cache Blocking | 134,128,047 | 8.4431 | **+6.99% cycles** |
 
-Cache Blocking 比未分块 DynPreUnpack 又慢 25.54%。理论模型预测 L2→L1D 带宽压力已经降到持续带宽以下，但端到端性能反而进一步下降，因此实际瓶颈不能仅由带宽需求解释。
+Cache Blocking 比未分块 DynPreUnpack 少 13.71% cycles，说明分块复用产生了端到端收益；但它仍比基础 m8b 多 6.99% cycles，尚未完全兑现理论模型预测的收益。
 
 ### 3.4 进一步开销分析
 
 | 组分 | m8b | m8b-DPU | m8b-DPU-CB |
 |---|---:|---:|---:|
-| 动态预解压 | 0.000M cycles | 2.226M cycles | 5.596M cycles |
-| Inner loop | 43.963M cycles | 48.020M cycles | 45.158M cycles |
-| Inner loop output writeback | 37.221M cycles | 39.324M cycles | 37.808M cycles |
-| Batch reduction | 34.165M cycles | 41.919M cycles | 39.395M cycles |
-| 最终 C writeback | 6.057M cycles | 6.210M cycles | 计入 batch reduction |
-| Unpack C | 0.000M cycles | 0.000M cycles | 3.540M cycles |
-| 其他执行与控制开销 | 2.456M cycles | 8.549M cycles | 5.048M cycles |
-| **合计** | **123.745M cycles** | **146.120M cycles** | **136.636M cycles** |
+| 动态预解压 | — | 8.290M cycles | 7.667M cycles |
+| Inner loop | — | 51.649M cycles | 44.320M cycles |
+| Inner loop output writeback | — | 42.144M cycles | 37.359M cycles |
+| Batch reduction | — | 37.616M cycles | 37.423M cycles |
+| 最终 C writeback | — | 6.745M cycles | 计入 batch reduction |
+| Unpack C | — | 0.000M cycles | 2.284M cycles |
+| 其他执行与控制开销 | — | 8.808M cycles | 4.957M cycles |
+| **合计** | **125.360M cycles** | **155.441M cycles** | **134.128M cycles** |
+
+（待进一步分析）
 
 ## 4. 结论
 
 | 阶段 | 做了什么 | 理论预期 | 实测结果 |
 |---|---|---|---:|
-| 动态解压 m8b | baseline | baseline | 123.74M cycles |
-| 未分块 DynPreUnpack | 提前展开完整 W | 删除解压，但 L2→L1D 压力升至 9.60 B/cycle | 146.39M，+18.30% |
-| Cache Blocking | 在多个 A micro-panels 间复用 8 KiB W micro-panel | 理论带宽压力降至 3.52 B/cycle | 183.79M，+48.52% |
+| 动态解压 m8b | baseline | baseline | 125.360M cycles |
+| 未分块 DynPreUnpack | 提前展开完整 W | 删除解压，但 L2→L1D 压力升至 9.60 B/cycle | 155.441M，+24.00% |
+| Cache Blocking | 在多个 A micro-panels 间复用 8 KiB W micro-panel | 理论带宽压力降至 3.52 B/cycle | 134.128M，+6.99% |
 
 最终结论是：
 
 1. **基础 m8b 的顺序数据流大部分已被硬件预取覆盖。**总计 `0.514325 miss/inner` 中，inner A/W 主数据约占 `0.179 miss/inner`；相对 4 misses/inner 的无预取基线，约 96% 的潜在 main-load demand miss 已被避免。
-2. **动态预解压是算术换流量。**删除解压后 W loads 从 4 条增加到 8 条，理论周期从 56 降至 40 cycles/inner；compute payload 增至 384 B，所需 L2→L1D 带宽达到 9.60 B/cycle，即实测上限的 1.86 倍，端到端变慢。
-3. **Cache Blocking 的理论目标是解除 L2→L1D 带宽瓶颈。**在多个 A micro-panels 间复用 W micro-panel，可将代表 shape 的理论带宽压力从 9.60 降至 3.52 B/cycle；实测性能没有改善，原因尚未得到充分验证。
+2. **动态预解压是算术换流量。**删除解压后 W loads 从 4 条增加到 8 条，compute payload 增至 384 B，所需 L2→L1D 带宽达到 9.60 B/cycle；动态预解压本身约占 8.290M cycles，未分块 DPU 端到端比基础 m8b 多 24.00% cycles。
+3. **Cache Blocking 部分兑现了复用收益，但仍未超过基础 m8b。**在多个 A micro-panels 间复用 W micro-panel，将理论带宽压力从 9.60 降至 3.52 B/cycle；它比未分块 DPU 少 13.71% cycles，但仍比基础 m8b 多 6.99% cycles。
