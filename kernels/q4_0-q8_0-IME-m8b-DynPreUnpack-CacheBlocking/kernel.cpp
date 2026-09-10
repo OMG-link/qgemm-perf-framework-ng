@@ -70,14 +70,14 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
         vint32m2_t inner_acc6 = __riscv_vmv_v_x_i32m2(0, 16);
         vint32m2_t inner_acc7 = __riscv_vmv_v_x_i32m2(0, 16);
 
-#pragma clang loop unroll(disable)
+        asm volatile("" : "+vr"(inner_acc0), "+vr"(inner_acc1), "+vr"(inner_acc2), "+vr"(inner_acc3), "+vr"(inner_acc4), "+vr"(inner_acc5), "+vr"(inner_acc6), "+vr"(inner_acc7));
+
         for (size_t inner = 0; inner < numKIter; ++inner) {
 
             const size_t vl8 = __riscv_vsetvlmax_e8m1();
             const int8_t *blockWQs = baseWQs + blockWIndex * kUnpackedBBytesPerBlock;
             const int8_t *unpackedInner = blockWQs + inner * kUnpackedBBytesPerKIter;
-            vint8m8_t unpackedB;
-            asm volatile("vl8re8.v %0, (%1)" : "=vr"(unpackedB) : "r"(unpackedInner) : "memory");
+            vint8m8_t unpackedB = __riscv_vle8_v_i8m8(unpackedInner, __riscv_vsetvlmax_e8m8());
             vint8m1_t bLo1i = __riscv_vget_v_i8m8_i8m1(unpackedB, 0);
             vint8m1_t bLo2i = __riscv_vget_v_i8m8_i8m1(unpackedB, 1);
             vint8m1_t bLo3i = __riscv_vget_v_i8m8_i8m1(unpackedB, 2);
@@ -100,20 +100,22 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
             inner_acc2 = __riscv_smt_vmadot_i32m2(inner_acc2, A1, bLo3i, kVmadotMode, kVmadotSignedness);
             inner_acc3 = __riscv_smt_vmadot_i32m2(inner_acc3, A1, bLo4i, kVmadotMode, kVmadotSignedness);
 
-            inner_acc0 = __riscv_smt_vmadot_i32m2(inner_acc0, A2, bHi1i, kVmadotMode, kVmadotSignedness);
-            inner_acc1 = __riscv_smt_vmadot_i32m2(inner_acc1, A2, bHi2i, kVmadotMode, kVmadotSignedness);
-            inner_acc2 = __riscv_smt_vmadot_i32m2(inner_acc2, A2, bHi3i, kVmadotMode, kVmadotSignedness);
-            inner_acc3 = __riscv_smt_vmadot_i32m2(inner_acc3, A2, bHi4i, kVmadotMode, kVmadotSignedness);
-
             inner_acc4 = __riscv_smt_vmadot_i32m2(inner_acc4, A3, bLo1i, kVmadotMode, kVmadotSignedness);
             inner_acc5 = __riscv_smt_vmadot_i32m2(inner_acc5, A3, bLo2i, kVmadotMode, kVmadotSignedness);
             inner_acc6 = __riscv_smt_vmadot_i32m2(inner_acc6, A3, bLo3i, kVmadotMode, kVmadotSignedness);
             inner_acc7 = __riscv_smt_vmadot_i32m2(inner_acc7, A3, bLo4i, kVmadotMode, kVmadotSignedness);
 
+            inner_acc0 = __riscv_smt_vmadot_i32m2(inner_acc0, A2, bHi1i, kVmadotMode, kVmadotSignedness);
+            inner_acc1 = __riscv_smt_vmadot_i32m2(inner_acc1, A2, bHi2i, kVmadotMode, kVmadotSignedness);
+            inner_acc2 = __riscv_smt_vmadot_i32m2(inner_acc2, A2, bHi3i, kVmadotMode, kVmadotSignedness);
+            inner_acc3 = __riscv_smt_vmadot_i32m2(inner_acc3, A2, bHi4i, kVmadotMode, kVmadotSignedness);
+
             inner_acc4 = __riscv_smt_vmadot_i32m2(inner_acc4, A4, bHi1i, kVmadotMode, kVmadotSignedness);
             inner_acc5 = __riscv_smt_vmadot_i32m2(inner_acc5, A4, bHi2i, kVmadotMode, kVmadotSignedness);
             inner_acc6 = __riscv_smt_vmadot_i32m2(inner_acc6, A4, bHi3i, kVmadotMode, kVmadotSignedness);
             inner_acc7 = __riscv_smt_vmadot_i32m2(inner_acc7, A4, bHi4i, kVmadotMode, kVmadotSignedness);
+
+            asm volatile("" : "+vr"(inner_acc0), "+vr"(inner_acc1), "+vr"(inner_acc2), "+vr"(inner_acc3), "+vr"(inner_acc4), "+vr"(inner_acc5), "+vr"(inner_acc6), "+vr"(inner_acc7));
         }
         int32_t *component = reduction_components + reductionCount * kOutputM * kOutputN;
         size_t vl_m1 = __riscv_vsetvlmax_e32m1();
