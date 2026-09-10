@@ -42,10 +42,16 @@ The benchmark accepts the following general options:
 --warmup N
 --samples N
 --iterations N       # omitted: calibrate automatically
+--threads N          # 1-4; omitted: single-threaded
 --no-verify
 --perf-events LIST    # replace the default cycles event with a comma-separated list
 --perf-event EVENT    # append one event; may be repeated
 ```
+
+The three `q4_0-q8_0-IME-m8b` variants support OpenMP parallel execution.
+Pass `--threads N` to select the runtime thread count. The default is one thread,
+so kernels without multi-threading support retain their existing behavior. The
+remote runner pins an N-thread run to CPU 0 through CPU N-1.
 
 The default event list is `cycles`. Built-in event names are:
 

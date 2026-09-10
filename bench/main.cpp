@@ -80,7 +80,7 @@ bool append_perf_events(std::string_view list, std::vector<ime::bench::PerfEvent
 
 void usage(const char *program) {
     std::printf("Usage: %s [--list] [--kernel ID|all] --m M --n N --k K "
-                "[--warmup N] [--samples N] [--iterations N] [--no-verify] "
+                "[--warmup N] [--samples N] [--iterations N] [--threads N] [--no-verify] "
                 "[--perf-events LIST] [--perf-event EVENT]\n"
                 "Events: cycles,instructions,task-clock,page-faults,dtlb-access,dtlb-miss,"
                 "l1d-access,l1d-miss,llc-access,llc-miss,raw:NAME:CONFIG\n",
@@ -130,6 +130,7 @@ int main(int argc, char **argv) {
         } else if (argument == "--warmup" && i + 1 < argc && parse_size(argv[++i], request.warmup_iterations)) {
         } else if (argument == "--samples" && i + 1 < argc && parse_size(argv[++i], request.samples)) {
         } else if (argument == "--iterations" && i + 1 < argc && parse_size(argv[++i], request.iterations)) {
+        } else if (argument == "--threads" && i + 1 < argc && parse_size(argv[++i], request.threads) && request.threads <= 4) {
         } else if ((argument == "--perf-events" || argument == "--perf-event") && i + 1 < argc) {
             if (!perf_events_explicit) {
                 request.perf_events.clear();

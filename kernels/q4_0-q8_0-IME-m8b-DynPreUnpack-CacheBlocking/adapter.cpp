@@ -24,6 +24,7 @@ static_assert(kAQuantBytesPerBlock == 256);
 static_assert(sizeof(block_q8_0_ime_m8) == 288);
 
 struct M8DynPreUnpackCacheBlockingState : CommonState {
+    size_t threads = 1;
     std::vector<block_q8_0_ime_m8> packed_a_m8;
     std::vector<uint8_t> packed_a_qs_storage;
     std::vector<float> packed_a_scales_storage;
@@ -44,6 +45,7 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
     auto state = std::make_unique<M8DynPreUnpackCacheBlockingState>();
     if (!initialize_q4_0_ime<8>(request, input, *state))
         return {nullptr, "expected Q4_0/Q8_0 input"};
+    state->threads = request.threads;
 
     const size_t blocks_k = state->blocks_k();
     const size_t tiles_m = state->m() / kMr;
@@ -86,6 +88,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
         std::unique_ptr<int8_t[]> unpacked_b{new int8_t[state.n() * state.k()]};
 
+#pragma omp parallel for schedule(static) num_threads(state.threads) if (state.threads > 1)
         for (size_t tile_n = 0; tile_n < state.n(); tile_n += kNr) {
             const size_t n_block_base = (tile_n / kNr) * blocks_k;
             for (size_t block_k = 0; block_k < blocks_k; block_k += kBlocksPerPanel) {
@@ -103,6 +106,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
 
             for (size_t chunk_begin = 0; chunk_begin < tiles_m; chunk_begin += chunk_tiles) {
                 const size_t chunk_end = std::min(tiles_m, chunk_begin + chunk_tiles);
+#pragma omp parallel for schedule(static) num_threads(state.threads) if (state.threads > 1)
                 for (size_t tile_n = 0; tile_n < state.n(); tile_n += kNr) {
                     const size_t n_block_base = (tile_n / kNr) * blocks_k;
                     const int8_t *unpacked_panel = unpacked_b.get() + (n_block_base + block_k) * kUnpackedBytesPerBlock;
@@ -121,6 +125,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
             }
         }
 
+#pragma omp parallel for schedule(static) num_threads(state.threads) if (state.threads > 1)
         for (size_t tile_m = 0; tile_m < tiles_m; ++tile_m) {
             for (size_t tile_n_index = 0; tile_n_index < tiles_n; ++tile_n_index) {
                 const float *packed_c_tile = state.packed_c.data() + (tile_m * tiles_n + tile_n_index) * kMr * kNr;

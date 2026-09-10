@@ -26,6 +26,7 @@ struct BenchmarkRequest {
     size_t warmup_iterations = 3;
     size_t samples = 10;
     size_t iterations = 0;
+    size_t threads = 1;
     uint64_t target_cycles = 100'000'000;
     uint64_t seed = 1;
     bool verify = true;

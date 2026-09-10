@@ -27,11 +27,27 @@ emit_assembly() {
 }
 
 run_remote() {
-    local remote_dir
+    local remote_dir threads=1 cpus remote_command index
+    local -a arguments=("$@")
+    for ((index = 0; index < ${#arguments[@]}; ++index)); do
+        if [[ ${arguments[index]} == --threads ]]; then
+            if ((index + 1 >= ${#arguments[@]})) || [[ ! ${arguments[index + 1]} =~ ^[1-4]$ ]]; then
+                echo "--threads requires an integer from 1 to 4" >&2
+                return 2
+            fi
+            threads=${arguments[index + 1]}
+            ((++index))
+        fi
+    done
+    cpus="0-$((threads - 1))"
     remote_dir=$(ssh "${DEPLOYMENT_SERVER}" 'mktemp -d /tmp/ime-llama.XXXXXX')
     trap 'ssh "${DEPLOYMENT_SERVER}" "rm -rf -- ${remote_dir}" >/dev/null 2>&1 || true' RETURN
     scp -q "${BIN}" "${DEPLOYMENT_SERVER}:${remote_dir}/ime-llama-bench"
-    ssh "${DEPLOYMENT_SERVER}" "taskset -c 0 '${remote_dir}/ime-llama-bench' $*"
+    printf -v remote_command 'env OMP_NUM_THREADS=%q OMP_DYNAMIC=FALSE taskset -c %q %q' "${threads}" "${cpus}" "${remote_dir}/ime-llama-bench"
+    for argument in "${arguments[@]}"; do
+        printf -v remote_command '%s %q' "${remote_command}" "${argument}"
+    done
+    ssh "${DEPLOYMENT_SERVER}" "${remote_command}"
 }
 
 usage() {
@@ -48,6 +64,7 @@ Environment overrides: TOOLCHAIN_DIR, CXX, DEPLOYMENT_SERVER, BUILD_DIR.
 Benchmark examples:
   $0 run --list
   $0 run --kernel all --m 480 --n 1536 --k 1536 --samples 10
+    $0 run --kernel q4_0-q8_0-IME-m8b --m 480 --n 1536 --k 1536 --threads 4
 EOF
 }
 

@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(ime_llama LANGUAGES CXX ASM)
 
+find_package(OpenMP REQUIRED COMPONENTS CXX)
+
 set(IME_ARCH "rv64gcv_zvfh_zicbop_zba_xsmtvdot" CACHE STRING
     "RISC-V architecture used by the SpacemiT IME kernels")
 set(IME_TUNE "spacemit-x60" CACHE STRING
@@ -237,7 +239,7 @@ target_include_directories(ime-llama-bench PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
     ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
 )
-target_link_libraries(ime-llama-bench PRIVATE ime_compile_options ime-kernels)
+target_link_libraries(ime-llama-bench PRIVATE ime_compile_options ime-kernels OpenMP::OpenMP_CXX)
 target_compile_options(ime-llama-bench PRIVATE -Wall -Wextra)
 
 add_ime_assembly(bench/main.cpp main)

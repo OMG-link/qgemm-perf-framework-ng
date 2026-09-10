@@ -19,6 +19,7 @@ static_assert(kAQuantBytesPerBlock == 256);
 static_assert(sizeof(block_q8_0_ime_m8) == 288);
 
 struct M8DynPreUnpackState : CommonState {
+    size_t threads = 1;
     std::vector<block_q8_0_ime_m8> packed_a_m8;
     std::vector<uint8_t> packed_a_qs_storage;
     std::vector<float> packed_a_scales_storage;
@@ -39,6 +40,7 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
     if (!initialize_q4_0_ime<8>(request, input, *state)) {
         return {nullptr, "expected Q4_0/Q8_0 input"};
     }
+    state->threads = request.threads;
 
     auto m_major_a = std::move(state->packed_a_m8);
     const size_t packed_block_count = m_major_a.size();
@@ -66,6 +68,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
         std::unique_ptr<int8_t[]> unpacked_b_qs{new int8_t[state.n() * state.k()]};
         unpack_q4_0_ime_m8b_rvv(state.packed_b_qs.data(), unpacked_b_qs.get(), total_b_blocks);
+#pragma omp parallel for schedule(static) num_threads(state.threads) if (state.threads > 1)
         for (size_t tile_m = 0; tile_m < state.m(); tile_m += kMr) {
             const size_t a_block = (tile_m / kMr) * state.blocks_k();
             const int8_t *a_qs = state.packed_a_qs + a_block * kAQuantBytesPerBlock;
