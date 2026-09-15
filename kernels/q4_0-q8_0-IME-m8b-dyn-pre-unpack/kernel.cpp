@@ -4,6 +4,7 @@
 #include <smt_vector.h>
 
 #include "kernel.h"
+#include "l1d_load_miss_probe.h"
 #include "rvv_vl.h"
 
 #define REPEAT_8(operation, ...)                                                                                                                                                                       \
@@ -75,8 +76,7 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack(con
                 const size_t vl8 = __riscv_vsetvlmax_e8m1();
                 const int8_t *blockWQs = baseWQs + blockWIndex * kUnpackedBBytesPerBlock;
                 const int8_t *unpackedInner = blockWQs + inner * kUnpackedBBytesPerKIter;
-                vint8m8_t unpackedB;
-                asm volatile("vl8re8.v %0, (%1)" : "=vr"(unpackedB) : "r"(unpackedInner) : "memory");
+                IME_L1D_PROBE_VL8RE8_M8(vint8m8_t, unpackedB, unpackedInner, ime_l1d_probe_m8b_dpu_w_main_0);
                 vint8m1_t bLo1i = __riscv_vget_v_i8m8_i8m1(unpackedB, 0);
                 vint8m1_t bLo2i = __riscv_vget_v_i8m8_i8m1(unpackedB, 1);
                 vint8m1_t bLo3i = __riscv_vget_v_i8m8_i8m1(unpackedB, 2);
@@ -87,10 +87,10 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack(con
                 vint8m1_t bHi4i = __riscv_vget_v_i8m8_i8m1(unpackedB, 7);
 
                 const int8_t *aInner = blockAQs + inner * kABytesPerKIter;
-                vint8m1_t A1 = __riscv_vle8_v_i8m1(aInner, vl8);
-                vint8m1_t A2 = __riscv_vle8_v_i8m1(aInner + kBytesPerMIV, vl8);
-                vint8m1_t A3 = __riscv_vle8_v_i8m1(aInner + 2 * kBytesPerMIV, vl8);
-                vint8m1_t A4 = __riscv_vle8_v_i8m1(aInner + 3 * kBytesPerMIV, vl8);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A1, aInner, ime_l1d_probe_m8b_dpu_a_main_0);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A2, aInner + kBytesPerMIV, ime_l1d_probe_m8b_dpu_a_main_1);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A3, aInner + 2 * kBytesPerMIV, ime_l1d_probe_m8b_dpu_a_main_2);
+                IME_L1D_PROBE_VLE8_M1(vint8m1_t, A4, aInner + 3 * kBytesPerMIV, ime_l1d_probe_m8b_dpu_a_main_3);
 
                 asm volatile("" : : "vr"(bLo1i), "vr"(bLo2i), "vr"(bLo3i), "vr"(bLo4i), "vr"(bHi1i), "vr"(bHi2i), "vr"(bHi3i), "vr"(bHi4i), "vr"(A1), "vr"(A2), "vr"(A3), "vr"(A4));
 
@@ -149,12 +149,23 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack(con
             reductionCount++;
             if (reductionCount == kRedBatchSize or bk == BlockCountK) {
                 const size_t reductionBlockStart = bk - reductionCount;
-#define LOAD_REDUCTION_ACCUMULATOR(index, unused) vfloat32m2_t reduction_acc##index = __riscv_vle32_v_f32m2(acc + index * kOutputN, ime::rvv::vl(32, 2));
+#define DECLARE_REDUCTION_ACCUMULATOR(index, unused) vfloat32m2_t reduction_acc##index;
+#define LOAD_8_REDUCTION_ACCUMULATORS(address, stride, symbol_prefix)                                                                                                                                  \
+    asm volatile(IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 0), "vl2re32.v %0, (%8)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 1), "vl2re32.v %1, (%9)")                             \
+                     IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 2), "vl2re32.v %2, (%10)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 3), "vl2re32.v %3, (%11)")                       \
+                         IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 4), "vl2re32.v %4, (%12)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 5), "vl2re32.v %5, (%13)")                   \
+                             IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 6), "vl2re32.v %6, (%14)") IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(symbol_prefix, 7), "vl2re32.v %7, (%15)")               \
+                 : "=&vr"(reduction_acc0), "=&vr"(reduction_acc1), "=&vr"(reduction_acc2), "=&vr"(reduction_acc3), "=&vr"(reduction_acc4), "=&vr"(reduction_acc5), "=&vr"(reduction_acc6),             \
+                   "=&vr"(reduction_acc7)                                                                                                                                                              \
+                 : "r"((address) + 0 * (stride)), "r"((address) + 1 * (stride)), "r"((address) + 2 * (stride)), "r"((address) + 3 * (stride)), "r"((address) + 4 * (stride)),                          \
+                   "r"((address) + 5 * (stride)), "r"((address) + 6 * (stride)), "r"((address) + 7 * (stride))                                                                                         \
+                 : "memory");
 #define REDUCE_ROW(index, unused)                                                                                                                                                                      \
     {                                                                                                                                                                                                  \
-        vint32m2_t component_i = __riscv_vle32_v_i32m2(component + index * kOutputN, ime::rvv::vl(32, 2));                                                                                             \
+        IME_L1D_PROBE_VLE32_M2(vint32m2_t, component_i, component + index * kOutputN, ime::rvv::vl(32, 2), IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_dpu_component_, index));                                \
         vfloat32m2_t component_f = __riscv_vfcvt_f_x_v_f32m2(component_i, ime::rvv::vl(32, 2));                                                                                                        \
-        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, baseAScales[reductionBlock * kMr + index], ime::rvv::vl(32, 2));                                                                             \
+        IME_L1D_PROBE_FLW(a_scale, baseAScales + reductionBlock * kMr + index, IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_dpu_a_scale_, index));                                                              \
+        vfloat32m2_t abscale = __riscv_vfmul_vf_f32m2(bs, a_scale, ime::rvv::vl(32, 2));                                                                                                               \
         reduction_acc##index = __riscv_vfmacc_vv_f32m2(reduction_acc##index, component_f, abscale, ime::rvv::vl(32, 2));                                                                               \
     }
 #define REDUCTION_BARRIER(index0, index1, index2, index3)                                                                                                                                              \
@@ -167,12 +178,14 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack(con
     REDUCTION_BARRIER(index0, index1, index2, index3)
 #define STORE_REDUCTION_ACCUMULATOR(index, unused) __riscv_vse32_v_f32m2(acc + index * kOutputN, reduction_acc##index, ime::rvv::vl(32, 2));
 
-                REPEAT_8(LOAD_REDUCTION_ACCUMULATOR, _)
+                REPEAT_8(DECLARE_REDUCTION_ACCUMULATOR, _)
+                LOAD_8_REDUCTION_ACCUMULATORS(acc, kOutputN, ime_l1d_probe_m8b_dpu_local_accumulator_)
 
                 for (size_t reductionIndex = 0; reductionIndex < reductionCount; ++reductionIndex) {
                     const size_t reductionBlock = reductionBlockStart + reductionIndex;
                     const int32_t *component = reduction_components + reductionIndex * kOutputM * kOutputN;
-                    vfloat16m1_t bsh = __riscv_vle16_v_f16m1((_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), ime::rvv::vl(16, 1));
+                    IME_L1D_PROBE_VLE16_M1(vfloat16m1_t, bsh, (_Float16 *)(baseWScales + (n / kOutputN) * BlockCountK * kOutputN + reductionBlock * kOutputN), ime::rvv::vl(16, 1),
+                                           ime_l1d_probe_m8b_dpu_w_scale_0);
                     vfloat32m2_t bs = __riscv_vfwcvt_f_f_v_f32m2(bsh, ime::rvv::vl(16, 1));
 
                     REDUCE_ROW_QUAD(0, 1, 2, 3)
@@ -185,7 +198,8 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack(con
 #undef REDUCE_ROW_QUAD
 #undef REDUCTION_BARRIER
 #undef REDUCE_ROW
-#undef LOAD_REDUCTION_ACCUMULATOR
+#undef LOAD_8_REDUCTION_ACCUMULATORS
+#undef DECLARE_REDUCTION_ACCUMULATOR
                 reductionCount = 0;
             }
         }

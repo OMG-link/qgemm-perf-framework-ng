@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-START_RE = re.compile(r"^(ime_l1d_probe_(m8b(?:_cb)?)_(.+)_([0-9]+))_start$")
+START_RE = re.compile(r"^(ime_l1d_probe_(m8b(?:_cb|_dpu)?)_(.+)_([0-9]+))_start$")
 
 
 def read_symbols(elf: Path, nm: str):
