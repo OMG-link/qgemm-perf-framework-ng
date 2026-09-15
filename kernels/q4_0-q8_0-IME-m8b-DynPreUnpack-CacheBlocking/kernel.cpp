@@ -71,6 +71,9 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
 
         asm volatile("" : "+vr"(inner_acc0), "+vr"(inner_acc1), "+vr"(inner_acc2), "+vr"(inner_acc3), "+vr"(inner_acc4), "+vr"(inner_acc5), "+vr"(inner_acc6), "+vr"(inner_acc7));
 
+        // The probe macros emit globally visible symbol ranges, so this loop must
+        // stay rolled: unrolling would duplicate every probe label.
+#pragma clang loop unroll(disable)
         for (size_t inner = 0; inner < numKIter; ++inner) {
 
             const size_t vl8 = __riscv_vsetvlmax_e8m1();
