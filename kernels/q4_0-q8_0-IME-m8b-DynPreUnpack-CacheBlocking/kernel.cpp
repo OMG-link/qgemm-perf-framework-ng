@@ -4,11 +4,25 @@
 #include <smt_vector.h>
 
 #include "kernel.h"
+#include "l1d_load_miss_probe.h"
 #include "rvv_vl.h"
 
 #define REPEAT_8(operation, ...)                                                                                                                                                                       \
     operation(0, __VA_ARGS__) operation(1, __VA_ARGS__) operation(2, __VA_ARGS__) operation(3, __VA_ARGS__) operation(4, __VA_ARGS__) operation(5, __VA_ARGS__) operation(6, __VA_ARGS__)              \
         operation(7, __VA_ARGS__)
+
+// The 8 KiB W micro-panel is walked as 16 chunks of 512 B (2 inners x 256 B).
+// A single label for the whole walk cannot say *which part* of the panel misses,
+// so every bk gets its own load site; the panel position is then the iteration
+// axis that the sample counts are bucketed by.  Each bk has identical exposure
+// (numKIter loads of the same width), so the counts are directly comparable.
+#define IME_CB_W_MAIN_CASE(index)                                                                                                     \
+    case index:                                                                                                                       \
+        asm volatile(IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_cb_wmainpos_, index), "vl8re8.v %0, (%1)")                 \
+                     : "=vr"(unpackedB)                                                                                               \
+                     : "r"(unpackedInner)                                                                                             \
+                     : "memory", "v0", "v1");                                                                                         \
+        break;
 
 constexpr size_t kMr = 8;
 constexpr size_t kNr = 16;
@@ -70,12 +84,38 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
 
         asm volatile("" : "+vr"(inner_acc0), "+vr"(inner_acc1), "+vr"(inner_acc2), "+vr"(inner_acc3), "+vr"(inner_acc4), "+vr"(inner_acc5), "+vr"(inner_acc6), "+vr"(inner_acc7));
 
+        // Each probe label must appear exactly once, so this loop stays rolled.
+#pragma clang loop unroll(disable)
         for (size_t inner = 0; inner < numKIter; ++inner) {
 
             const size_t vl8 = __riscv_vsetvlmax_e8m1();
             const int8_t *blockWQs = baseWQs + blockWIndex * kUnpackedBBytesPerBlock;
             const int8_t *unpackedInner = blockWQs + inner * kUnpackedBBytesPerKIter;
-            vint8m8_t unpackedB = __riscv_vle8_v_i8m8(unpackedInner, __riscv_vsetvlmax_e8m8());
+            vint8m8_t unpackedB;
+            switch (blockWIndex) {
+                IME_CB_W_MAIN_CASE(0)
+                IME_CB_W_MAIN_CASE(1)
+                IME_CB_W_MAIN_CASE(2)
+                IME_CB_W_MAIN_CASE(3)
+                IME_CB_W_MAIN_CASE(4)
+                IME_CB_W_MAIN_CASE(5)
+                IME_CB_W_MAIN_CASE(6)
+                IME_CB_W_MAIN_CASE(7)
+                IME_CB_W_MAIN_CASE(8)
+                IME_CB_W_MAIN_CASE(9)
+                IME_CB_W_MAIN_CASE(10)
+                IME_CB_W_MAIN_CASE(11)
+                IME_CB_W_MAIN_CASE(12)
+                IME_CB_W_MAIN_CASE(13)
+                IME_CB_W_MAIN_CASE(14)
+                IME_CB_W_MAIN_CASE(15)
+                default:
+                    asm volatile(IME_L1D_PROBE_ASM(ime_l1d_probe_m8b_cb_wmainpos_16, "vl8re8.v %0, (%1)")
+                                 : "=vr"(unpackedB)
+                                 : "r"(unpackedInner)
+                                 : "memory", "v0", "v1");
+                    break;
+            }
             vint8m1_t bLo1i = __riscv_vget_v_i8m8_i8m1(unpackedB, 0);
             vint8m1_t bLo2i = __riscv_vget_v_i8m8_i8m1(unpackedB, 1);
             vint8m1_t bLo3i = __riscv_vget_v_i8m8_i8m1(unpackedB, 2);
