@@ -1,17 +1,28 @@
 #include "adapter_common.h"
 #include "q4_0_common.h"
 
+#include <cstring>
 #include <memory>
+#include <vector>
 
 #include "ime1_dispatch.h"
 
 namespace ime::bench::adapters {
 namespace {
-struct State : CommonState { Q4_0M4N16ImePackedData q4; };
+struct State : CommonState {
+    Q4_0M4N16ImePackedData q4;
+    std::vector<block_q4_0_ime_n16_scale_first> packed_b;
+};
 
 PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &input) {
     auto state = std::make_unique<State>();
     if (!initialize_q4_0_ime<4>(request, input, *state)) return {nullptr, "expected Q4_0/Q8_0 input"};
+    state->packed_b.resize(state->q4.packed_b.size());
+    for (size_t block = 0; block < state->packed_b.size(); ++block) {
+        std::memcpy(state->packed_b[block].d, state->q4.packed_b[block].d, sizeof(state->packed_b[block].d));
+        std::memcpy(state->packed_b[block].qs, state->q4.packed_b[block].qs, sizeof(state->packed_b[block].qs));
+    }
+    std::vector<block_q4_0_ime_n16>().swap(state->q4.packed_b);
     return {state.release(), {}};
 }
 
@@ -23,7 +34,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
             const auto *a = state.q4.packed_a_m4.data() + (tile_m / 4) * state.blocks_k() * m4_block_size;
             for (size_t tile_n = 0; tile_n < state.n(); tile_n += 16) {
                 const auto *b = reinterpret_cast<const std::byte *>(
-                    state.q4.packed_b.data() + (tile_n / 16) * state.blocks_k());
+                    state.packed_b.data() + (tile_n / 16) * state.blocks_k());
                 sqnbitgemm_spacemit_ime::ime1::gemm_kernel_i8i4(
                     QK8_0, a, b, nullptr, nullptr,
                     state.output().data() + tile_m * state.n() + tile_n,

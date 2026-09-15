@@ -21,11 +21,18 @@ using block_q8_0_rvv_m8 = block_q8_0_rvv<8>;
 using block_q8_0_rvv_m12 = block_q8_0_rvv<12>;
 
 template <size_t Columns> struct block_q4_0_ime {
+    alignas(8) int8_t qs[Columns * QK4_0 / 2];
+    _Float16 d[Columns];
+};
+
+using block_q4_0_ime_n16 = block_q4_0_ime<16>;
+
+template <size_t Columns> struct block_q4_0_ime_scale_first {
     _Float16 d[Columns];
     alignas(8) int8_t qs[Columns * QK4_0 / 2];
 };
 
-using block_q4_0_ime_n16 = block_q4_0_ime<16>;
+using block_q4_0_ime_n16_scale_first = block_q4_0_ime_scale_first<16>;
 
 template <size_t Rows> struct block_q8_0_ime {
     float d[Rows];
@@ -65,10 +72,16 @@ static_assert(sizeof(block_q8_0_rvv_m12) ==
               12 * sizeof(_Float16) + 12 * QK8_0);
 static_assert(sizeof(block_q4_0_ime_n16) ==
               16 * sizeof(_Float16) + 16 * QK4_0 / 2);
+static_assert(offsetof(block_q4_0_ime_n16, qs) == 0);
+static_assert(offsetof(block_q4_0_ime_n16, d) == 16 * QK4_0 / 2);
+static_assert(sizeof(block_q4_0_ime_n16_scale_first) == sizeof(block_q4_0_ime_n16));
+static_assert(offsetof(block_q4_0_ime_n16_scale_first, d) == 0);
+static_assert(offsetof(block_q4_0_ime_n16_scale_first, qs) == 16 * sizeof(_Float16));
 static_assert(alignof(block_q4_0_rvv_n32) >= 8);
 static_assert(alignof(block_q8_0_rvv_m8) >= 8);
 static_assert(alignof(block_q8_0_rvv_m12) >= 8);
 static_assert(alignof(block_q4_0_ime_n16) >= 8);
+static_assert(alignof(block_q4_0_ime_n16_scale_first) >= 8);
 static_assert(sizeof(block_q8_0_ime_m4) ==
               4 * sizeof(float) + 4 * QK8_0);
 static_assert(sizeof(block_q8_0_ime_m8) ==
