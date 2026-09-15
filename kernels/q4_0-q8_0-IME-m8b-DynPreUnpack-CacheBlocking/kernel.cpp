@@ -11,18 +11,47 @@
     operation(0, __VA_ARGS__) operation(1, __VA_ARGS__) operation(2, __VA_ARGS__) operation(3, __VA_ARGS__) operation(4, __VA_ARGS__) operation(5, __VA_ARGS__) operation(6, __VA_ARGS__)              \
         operation(7, __VA_ARGS__)
 
-// The 8 KiB W micro-panel is walked as 16 chunks of 512 B (2 inners x 256 B).
-// A single label for the whole walk cannot say *which part* of the panel misses,
-// so every bk gets its own load site; the panel position is then the iteration
-// axis that the sample counts are bucketed by.  Each bk has identical exposure
-// (numKIter loads of the same width), so the counts are directly comparable.
-#define IME_CB_W_MAIN_CASE(index)                                                                                                     \
+// The 8 KiB W micro-panel is walked as 16 chunks of 512 B (2 inners x 256 B), and
+// the adapter re-uses one panel for every tile_m of a chunk.  Two axes matter:
+//   * residency group - `firstTile` marks the call that has to re-establish the
+//     panel after the adapter moved on to a new tile_n;
+//   * panel position  - which 512 B chunk of the walk is being read.
+// Giving each (group, bk) pair its own load site turns the r5 samples into a
+// per-position, per-residency attribution.  Within a group every bk has the same
+// exposure, so counts are comparable without normalisation.
+#define IME_CB_W_MAIN_LOAD(symbol)                                                                                                    \
+    asm volatile(IME_L1D_PROBE_ASM(symbol, "vl8re8.v %0, (%1)")                                                                       \
+                 : "=vr"(unpackedB)                                                                                                   \
+                 : "r"(unpackedInner)                                                                                                 \
+                 : "memory", "v0", "v1");
+
+#define IME_CB_W_MAIN_CASE(group, index)                                                                                              \
     case index:                                                                                                                       \
-        asm volatile(IME_L1D_PROBE_ASM(IME_L1D_PROBE_CAT(ime_l1d_probe_m8b_cb_wmainpos_, index), "vl8re8.v %0, (%1)")                 \
-                     : "=vr"(unpackedB)                                                                                               \
-                     : "r"(unpackedInner)                                                                                             \
-                     : "memory", "v0", "v1");                                                                                         \
+        IME_CB_W_MAIN_LOAD(IME_L1D_PROBE_CAT(group, index))                                                                           \
         break;
+
+#define IME_CB_W_MAIN_GROUP(group)                                                                                                    \
+    switch (blockWIndex) {                                                                                                            \
+        IME_CB_W_MAIN_CASE(group, 0)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 1)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 2)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 3)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 4)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 5)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 6)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 7)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 8)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 9)                                                                                                  \
+        IME_CB_W_MAIN_CASE(group, 10)                                                                                                 \
+        IME_CB_W_MAIN_CASE(group, 11)                                                                                                 \
+        IME_CB_W_MAIN_CASE(group, 12)                                                                                                 \
+        IME_CB_W_MAIN_CASE(group, 13)                                                                                                 \
+        IME_CB_W_MAIN_CASE(group, 14)                                                                                                 \
+        IME_CB_W_MAIN_CASE(group, 15)                                                                                                 \
+        default:                                                                                                                      \
+            IME_CB_W_MAIN_LOAD(IME_L1D_PROBE_CAT(group, 16))                                                                          \
+            break;                                                                                                                    \
+    }
 
 constexpr size_t kMr = 8;
 constexpr size_t kNr = 16;
@@ -60,7 +89,7 @@ constexpr int kVmadotSignedness = 0;
 
 void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_CacheBlocking(const int8_t *GGML_RESTRICT baseAQs, const float *GGML_RESTRICT baseAScales,
                                                                                            const int8_t *GGML_RESTRICT baseWQs, const uint16_t *GGML_RESTRICT baseWScales, float *GGML_RESTRICT baseC,
-                                                                                           size_t BlockCountK, const size_t ldc, bool firstKc) {
+                                                                                           size_t BlockCountK, const size_t ldc, bool firstKc, bool firstTile) {
 
     const size_t numKIter = kBlockLength / kStepKPerIter;
 
@@ -92,29 +121,10 @@ void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_Cac
             const int8_t *blockWQs = baseWQs + blockWIndex * kUnpackedBBytesPerBlock;
             const int8_t *unpackedInner = blockWQs + inner * kUnpackedBBytesPerKIter;
             vint8m8_t unpackedB;
-            switch (blockWIndex) {
-                IME_CB_W_MAIN_CASE(0)
-                IME_CB_W_MAIN_CASE(1)
-                IME_CB_W_MAIN_CASE(2)
-                IME_CB_W_MAIN_CASE(3)
-                IME_CB_W_MAIN_CASE(4)
-                IME_CB_W_MAIN_CASE(5)
-                IME_CB_W_MAIN_CASE(6)
-                IME_CB_W_MAIN_CASE(7)
-                IME_CB_W_MAIN_CASE(8)
-                IME_CB_W_MAIN_CASE(9)
-                IME_CB_W_MAIN_CASE(10)
-                IME_CB_W_MAIN_CASE(11)
-                IME_CB_W_MAIN_CASE(12)
-                IME_CB_W_MAIN_CASE(13)
-                IME_CB_W_MAIN_CASE(14)
-                IME_CB_W_MAIN_CASE(15)
-                default:
-                    asm volatile(IME_L1D_PROBE_ASM(ime_l1d_probe_m8b_cb_wmainpos_16, "vl8re8.v %0, (%1)")
-                                 : "=vr"(unpackedB)
-                                 : "r"(unpackedInner)
-                                 : "memory", "v0", "v1");
-                    break;
+            if (firstTile) {
+                IME_CB_W_MAIN_GROUP(ime_l1d_probe_m8b_cb_swfirst_)
+            } else {
+                IME_CB_W_MAIN_GROUP(ime_l1d_probe_m8b_cb_swreuse_)
             }
             vint8m1_t bLo1i = __riscv_vget_v_i8m8_i8m1(unpackedB, 0);
             vint8m1_t bLo2i = __riscv_vget_v_i8m8_i8m1(unpackedB, 1);

@@ -119,7 +119,7 @@ void run(KernelState opaque, size_t iterations) noexcept {
                         const size_t tile_n_index = tile_n / kNr;
                         float *packed_c_tile = state.packed_c.data() + (tile_m * tiles_n + tile_n_index) * kMr * kNr;
                         SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed_DynPreUnpack_CacheBlocking(a_qs, a_scales, unpacked_panel, panel_scales, packed_c_tile, local_blocks, kNr,
-                                                                                                              block_k == 0);
+                                                                                                              block_k == 0, tile_m == chunk_begin);
                     }
                 }
             }

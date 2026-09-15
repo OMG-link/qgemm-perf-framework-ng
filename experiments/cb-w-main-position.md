@@ -142,7 +142,62 @@ flush — which together hold 46.6% of the misses on 25% of the walk. Removing t
 mid-call flush removes its spike, so the flush's ~5.6 KiB burst is what evicts the
 panel.
 
+## Follow-up: how much does a residency switch itself cost?
+
+The adapter re-uses one W panel for every `tile_m` of a chunk, so the panel changes
+only when `tile_n` advances. The call that has to re-establish the panel is exactly
+the one with `tile_m == chunk_begin`, so the adapter passes that as a new
+`firstTile` flag and the W load site is split into a `swfirst_*` and a `swreuse_*`
+label set (34 labels). Then the r5 counts split into the switch cost and the
+steady-state cost.
+
+Call model for `M=480, N=1536, K=1536` (chunks `[28, 28, 4]`, `tiles_n = 96`,
+3 panels, 60 calls per `(panel, tile_n)`):
+
+```text
+switch calls = 3 x 96 x 3   =    864 per iteration   (one per chunk per tile_n)
+reuse  calls = 17280 - 864  = 16416 per iteration    (a ~19-call reuse window)
+W line touches              =  128 x 17280 = 2,211,840 per iteration
+```
+
+Scaling the sample shares onto the production figure of `0.2853 miss/inner`
+(`= 157,759` W-main misses per iteration):
+
+| residency group | samples | share | misses/iteration | misses/call | miss rate/line |
+|---|---:|---:|---:|---:|---:|
+| `firstTile` (switch) | 366 | 2.9% | 4,530 | **5.24** | **4.1%** |
+| reuse | 12,381 | 97.1% | 153,230 | **9.33** | **7.3%** |
+
+| bk | switch (misses/call) | reuse (misses/call) |
+|---:|---:|---:|
+| 0 | 4.23 | 1.09 |
+| 1 | 0.30 | 0.91 |
+| 2 | 0.17 | 0.54 |
+| 3 | 0.04 | 0.45 |
+| 8 | 0.06 | 1.09 |
+| 9 | 0.43 | 0.75 |
+| others | <= 0.01 | 0.30-0.67 |
+
+Reading: **switching which W panel is resident is cheap.** A switch re-establishes
+the 8 KiB panel for only ~5.2 of its 128 demand lines (4.1%), and 81% of even that
+sits on `bk = 0` — the first 512 B the switch has to bring in. Switching accounts
+for 2.9% of all W-main misses; the remaining 97.1% happen on calls that already
+have the panel resident, at a *higher* per-line rate (7.3%) than the switching call
+itself.
+
+The reuse-side profile keeps the flush signature from the first experiment: `bk = 0`
+and `bk = 8` are the two highest positions (1.09 misses/call against a 0.30-0.67
+floor), i.e. the loads that follow the end-of-call flush and the mid-call flush.
+So the W panel is not lost because the adapter moved on to another panel — it is
+lost *while it is supposed to be resident*, by the reduction traffic of the calls
+that reuse it.
+
+
 ## Reproducing
+
+The three variants differ only in `--out` (and, for the control, the one-line
+`kRedBatchSize` change): `cb-wmainpos` (per-position, production),
+`cb-wmainpos-kr16` (`kRedBatchSize = 16`) and `cb-switch` (`firstTile` split).
 
 ```sh
 BUILD_DIR=$PWD/build ./compile-and-test.sh build
