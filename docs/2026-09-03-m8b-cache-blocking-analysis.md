@@ -156,12 +156,12 @@ A/W main 在其它尺寸下的长稳态测试结果如下：
 
 | kernel | median cycles | FMA/cycle | 相对基础 m8b |
 |---|---:|---:|---:|
-| m8b，动态解压 | 125,360,000 | 9.0337 | baseline |
-| m8b，未分块 DynPreUnpack | 155,440,947 | 7.2855 | **+24.00% cycles** |
+| m8b，动态解压 | 125,852,839 | 8.9983 | baseline |
+| m8b，未分块 DynPreUnpack | 140,606,664 | 8.0541 | **+11.72% cycles** |
 
 ## 3. Cache Blocking：理论预期与实测结果
 
-> **本节结论：**Cache Blocking 理论上可以通过复用 W 解除 L2→L1D 带宽瓶颈。实测中，它比未分块 DynPreUnpack 少 13.71% cycles，但仍比基础 m8b 多 6.99% cycles，因此理论收益只兑现了一部分。
+> **本节结论：**Cache Blocking 理论上可以通过复用 W 解除 L2→L1D 带宽瓶颈。实测中，它比未分块 DynPreUnpack 少 12.01% cycles，比基础 m8b 少 1.69% cycles。
 
 ### 3.1 分块参数的选择
 
@@ -254,100 +254,55 @@ ceil(M / MC)
 
 | kernel | median cycles | FMA/cycle | 相对基础 m8b |
 |---|---:|---:|---:|
-| 动态解压 m8b | 125,360,000 | 9.0337 | baseline |
-| 未分块 DynPreUnpack | 155,440,947 | 7.2855 | **+24.00% cycles** |
-| DynPreUnpack + Cache Blocking | 134,128,047 | 8.4431 | **+6.99% cycles** |
+| 动态解压 m8b | 125,852,839 | 8.9983 | baseline |
+| 未分块 DynPreUnpack | 140,606,664 | 8.0541 | **+11.72% cycles** |
+| DynPreUnpack + Cache Blocking | 123,726,022 | 9.1530 | **-1.69% cycles** |
 
-Cache Blocking 比未分块 DynPreUnpack 少 13.71% cycles，说明分块复用产生了端到端收益；但它仍比基础 m8b 多 6.99% cycles，尚未完全兑现理论模型预测的收益。
+Cache Blocking 比未分块 DynPreUnpack 少 12.01% cycles，说明分块复用产生了端到端收益；但它仅比基础 m8b 少 1.69% cycles，实际收益相对有限。
 
 ### 3.4 开销测试结果
 
+以下为 `M = 480`、`N = 1536`、`K = 1536`、单线程下的原始测量数据。测量 binary 为 128 B repack 后的 `f4383ad` 构建（sha256 `d53bdfd50c631c56daf6fdfb7e5f7e39c26712861d4dd69d05ffd39b32861525`）。
+
 | 组分 | m8b | m8b-DPU | m8b-DPU-CB |
 |---|---:|---:|---:|
-| 动态预解压 | 0.000M cycles | 8.290M cycles | 7.667M cycles |
-| Inner loop | 45.596M cycles | 51.649M cycles | 44.320M cycles |
-| Inner loop output writeback | 37.746M cycles | 42.144M cycles | 37.359M cycles |
-| Batch reduction | 33.369M cycles | 37.616M cycles | 37.423M cycles |
-| 最终 C writeback | 6.387M cycles | 6.745M cycles | 计入 batch reduction |
-| Unpack C | 0.000M cycles | 0.000M cycles | 2.284M cycles |
-| 其他执行与控制开销 | 2.255M cycles | 8.808M cycles | 4.957M cycles |
-| **端到端实测** | **125.360M cycles** | **155.441M cycles** | **134.128M cycles** |
+| 动态预解压 | - | 0.954M cycles | 0.963M cycles |
+| Inner loop | 44.707M cycles | 48.546M cycles | 41.761M cycles |
+| Inner loop output writeback | 38.061M cycles | 40.268M cycles | 36.256M cycles |
+| Batch reduction | 34.184M cycles | 36.569M cycles | 36.642M cycles |
+| 最终 C writeback | 6.622M cycles | 6.391M cycles | 1.813M cycles |
+| Unpack C | - | - | 2.328M cycles |
+| 其他执行与控制开销 | 2.449M cycles | 8.084M cycles | 3.985M cycles |
+| **端到端实测** | **125.853M cycles** | **140.607M cycles** | **123.726M cycles** |
+
+L1D miss 归因：
+
+| load 类别 | m8b | m8b-DPU | m8b-DPU-CB |
+|---|---:|---:|---:|
+| W main（miss/inner） | 0.0089 | 0.0104 | 0.2853 |
+| A main（miss/inner） | 0.1982 | 0.0764 | 0.0203 |
+| W scale（miss/inner） | 0.0118 | 0.0171 | 0.0508 |
+| A scale（miss/inner） | 0.0562 | 0.0645 | 0.0241 |
+| reduction_components（miss/inner） | 0.1760 | 0.1729 | 0.1577 |
+| 本地归约累加器（miss/inner） | 0.0456 | 0.0814 | 0.0191 |
+| C 归约累加器（miss/inner） | — | — | 0.0860 |
+| 探针覆盖之外（miss/inner） | 0.0245 | 0.0269 | 0.0239 |
+| **合计（miss/inner）** | **0.5212** | **0.4496** | **0.6672** |
 
 ### 3.5 m8b-DPU-CB 相对 m8b 的变化分析
 
-m8b-DPU-CB 的端到端 cycles 比 m8b 多：
-
-```text
-134.128M - 125.360M = 8.768M cycles（+6.99%）
-```
-
-差异首先来自 Inner loop 没有兑现预期中的明显收益。代表 shape 每次 kernel pass 执行 `552,960` 个 K16 inner，因此：
-
-```text
-m8b Inner loop：
-45.596M / 552,960 = 82.458 cycles/inner
-
-m8b-DPU-CB Inner loop：
-44.320M / 552,960 = 80.152 cycles/inner
-
-实际改善：
-82.458 - 80.152 = 2.306 cycles/inner（2.80%）
-```
-
-预解包移除了 compute inner 中的 Q4 解包指令，理论执行预算由约 `56 cycles/inner` 降至约 `40 cycles/inner`，理论收益为 `16 cycles/inner`。但在数据命中 L1D 的受控测试中，m8b 和 m8b-DPU-CB 的 exact body 分别为 `56.667` 和 `47.002 cycles/inner`，实际兑现的纯执行收益只有：
-
-```text
-56.667 - 47.002 = 9.665 cycles/inner
-```
-
-生产 Inner loop 的 miss 测试结果为：
-
-| kernel | L1D miss/inner | L2 miss/inner |
-|---|---:|---:|
-| m8b | 0.2214 | 0.0097 |
-| m8b-DPU-CB | 0.2317 | 0.0376 |
-| 变化 | **+0.0103** | **+0.0279** |
-
-m8b-DPU-CB 的 L1D miss 总量只略有上升，但 L2 miss 增至 m8b 的约 `3.9` 倍。这说明 Cache Blocking 降低 L2→L1D 总体带宽压力后，复杂的 A/W 访问与复用模式仍造成了状态敏感的 cache 命中层级恶化，使一部分访问从 L2 hit 落入高延迟的 L2 miss/DRAM 路径。
-
-独立 pointer-chase 测得 L1 miss且L2 hit的增量 penalty 约为 `35.36 cycles`，L2 miss相对L2 hit还需增加约 `390.77 cycles`。据此估算，m8b-DPU-CB 相对 m8b 的 miss变化增加：
-
-```text
-L1D miss增量：
-0.0103 × 35.36 ≈ 0.36 cycles/inner
-
-L2 miss增量：
-0.0279 × 390.77 ≈ 10.90 cycles/inner
-
-合计：
-0.36 + 10.90 ≈ 11.26 cycles/inner
-```
-
-该估算假设 miss完全串行，生产执行中实际存在一定重叠，因此不作为精确的逐周期分解；但它说明了额外开销的量级。约 `11.26 cycles/inner` 的 miss增量代价超过了热L1测试中实际兑现的 `9.67 cycles/inner` 预解包收益，其中约 `97%` 来自 L2 miss。最终，生产 Inner loop 只改善 `2.306 cycles/inner`，没有形成足以主导端到端性能的收益。
-
-在 Inner loop 收益有限的同时，m8b-DPU-CB 还承担了 m8b 不存在或更低的额外阶段成本：
-
-| 额外或增加的阶段 | m8b-DPU-CB 相对 m8b |
-|---|---:|
-| 动态预解压 | +7.667M cycles |
-| Unpack C | +2.284M cycles |
-| Batch reduction | +4.054M cycles |
-| 其他执行与控制开销 | +2.702M cycles |
-
-部分组分的统计边界不同，例如 m8b-DPU-CB 的最终 C writeback 计入 Batch reduction，因此这些差值不直接相加作为端到端差值。端到端结果仍以实测的 `+8.768M cycles` 为准。
-
-综上，m8b-DPU-CB 未能超过 m8b 的原因是：**Inner loop 的实际收益只有 `2.306 cycles/inner`，远低于预解包的理论收益；这点有限收益不足以覆盖动态预解压、Unpack C、较高的 Batch reduction 及其他额外开销。**
+（待重新分析）
 
 ## 4. 结论
 
 | 阶段 | 做了什么 | 理论预期 | 实测结果 |
 |---|---|---|---:|
-| 动态解压 m8b | baseline | baseline | 125.360M cycles |
-| 未分块 DynPreUnpack | 提前展开完整 W | 删除解压，但 L2→L1D 压力升至 9.60 B/cycle | 155.441M，+24.00% |
-| Cache Blocking | 在多个 A micro-panels 间复用 8 KiB W micro-panel | 理论带宽压力降至 3.52 B/cycle | 134.128M，+6.99% |
+| 动态解压 m8b | baseline | baseline | 125.853M cycles |
+| 未分块 DynPreUnpack | 提前展开完整 W | 删除解压，但 L2→L1D 压力升至 9.60 B/cycle | 140.607M，+11.72% |
+| Cache Blocking | 在多个 A micro-panels 间复用 8 KiB W micro-panel | 理论带宽压力降至 3.52 B/cycle | 123.726M，-1.69% |
 
 最终结论是：
 
 1. **基础 m8b 的顺序数据流大部分已被硬件预取覆盖。**总计 `0.514325 miss/inner` 中，inner A/W 主数据约占 `0.179 miss/inner`；相对 4 misses/inner 的无预取基线，约 96% 的潜在 main-load demand miss 已被避免。
-2. **动态预解压是算术换流量。**删除解压后 W loads 从 4 条增加到 8 条，compute payload 增至 384 B，所需 L2→L1D 带宽达到 9.60 B/cycle；动态预解压本身约占 8.290M cycles，未分块 DPU 端到端比基础 m8b 多 24.00% cycles。
-3. **Cache Blocking 降低了带宽压力，但 Inner loop 没有形成明显收益。**在多个 A micro-panels 间复用 W micro-panel，将理论带宽压力从 9.60 降至 3.52 B/cycle；但状态敏感的 cache 命中层级恶化基本抵消了预解包实际兑现的执行收益，Inner loop 仅改善 2.306 cycles/inner。有限的 Inner loop 收益不足以覆盖动态预解压、Unpack C、较高的 Batch reduction 及其他额外开销，因此 m8b-DPU-CB 虽比未分块 DPU 少 13.71% cycles，端到端仍比基础 m8b 多 6.99% cycles。
+2. **动态预解压是算术换流量。**删除解压后 W loads 从 4 条增加到 8 条，compute payload 增至 384 B，所需 L2→L1D 带宽达到 9.60 B/cycle；动态预解压本身约占 0.954M cycles，未分块 DPU 端到端比基础 m8b 多 11.72% cycles。
+3. **Cache Blocking 降低了带宽压力，但 Inner loop 没有形成明显收益。**在多个 A micro-panels 间复用 W micro-panel，将理论带宽压力从 9.60 降至 3.52 B/cycle；但状态敏感的 cache 命中层级恶化基本抵消了预解包实际兑现的执行收益，Inner loop 仅改善 5.328 cycles/inner。有限的 Inner loop 收益不足以覆盖动态预解压、Unpack C、较高的 Batch reduction 及其他额外开销，因此 m8b-DPU-CB 虽比未分块 DPU 少 12.01% cycles，端到端比基础 m8b 少 1.69% cycles。

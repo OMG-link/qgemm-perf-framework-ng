@@ -28,20 +28,18 @@ constexpr int kVmadotMode = 3;
 constexpr int kVmadotSignedness = 0;
 
 [[gnu::noinline]] void unpack_q4_0_ime_m8b_cache_blocking_rvv(const uint8_t *GGML_RESTRICT packed_b_qs, int8_t *GGML_RESTRICT unpacked_b_qs, size_t block_count) {
-    const size_t vl8 = __riscv_vsetvlmax_e8m1();
+    const size_t vl8 = __riscv_vsetvl_e8m4(kPackedBBytesPerKIter);
     for (size_t block = 0; block < block_count; ++block) {
         const uint8_t *packed_block = packed_b_qs + block * kPackedBBytesPerBlock;
         int8_t *unpacked_block = unpacked_b_qs + block * kUnpackedBBytesPerBlock;
         for (size_t inner = 0; inner < kBlockLength / kStepKPerIter; ++inner) {
             const uint8_t *packed_inner = packed_block + inner * kPackedBBytesPerKIter;
             int8_t *unpacked_inner = unpacked_block + inner * kUnpackedBBytesPerKIter;
-            for (size_t operand = 0; operand < 4; ++operand) {
-                const vuint8m1_t packed = __riscv_vle8_v_u8m1(packed_inner + operand * kBytesPerMIV, vl8);
-                const vuint8m1_t lo = __riscv_vand_vx_u8m1(packed, 15, vl8);
-                const vuint8m1_t hi = __riscv_vsrl_vx_u8m1(packed, 4, vl8);
-                __riscv_vse8_v_i8m1(unpacked_inner + operand * kBytesPerMIV, __riscv_vadd_vx_i8m1(__riscv_vreinterpret_v_u8m1_i8m1(lo), kQuantizationZeroPoint, vl8), vl8);
-                __riscv_vse8_v_i8m1(unpacked_inner + (operand + 4) * kBytesPerMIV, __riscv_vadd_vx_i8m1(__riscv_vreinterpret_v_u8m1_i8m1(hi), kQuantizationZeroPoint, vl8), vl8);
-            }
+            const vuint8m4_t packed = __riscv_vle8_v_u8m4(packed_inner, vl8);
+            const vuint8m4_t lo = __riscv_vand_vx_u8m4(packed, 15, vl8);
+            const vuint8m4_t hi = __riscv_vsrl_vx_u8m4(packed, 4, vl8);
+            __riscv_vse8_v_i8m4(unpacked_inner, __riscv_vadd_vx_i8m4(__riscv_vreinterpret_v_u8m4_i8m4(lo), kQuantizationZeroPoint, vl8), vl8);
+            __riscv_vse8_v_i8m4(unpacked_inner + kPackedBBytesPerKIter, __riscv_vadd_vx_i8m4(__riscv_vreinterpret_v_u8m4_i8m4(hi), kQuantizationZeroPoint, vl8), vl8);
         }
     }
 }
