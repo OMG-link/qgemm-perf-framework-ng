@@ -6,7 +6,7 @@ After excluding all B-panel warmup misses, does hardware prefetch remain effecti
 
 ## Exact memory trace
 
-The independent `dpu-cb-prefetch` assembly reproduces the memory instruction order and cache-block loop shape of `q4_0-q8_0-IME-m8b-DynPreUnpack-CacheBlocking`, without reproducing arithmetic:
+The independent `dpu-cb-prefetch` assembly reproduces the memory instruction order and cache-block loop shape of `q4_0-q8_0-IME-m8b-DPU-CB`, without reproducing arithmetic:
 
 - one A chunk contains 28 M tiles × 16 QK32 blocks × 288 B = 129,024 B;
 - one B panel contains 16 blocks × 512 B = 8 KiB;

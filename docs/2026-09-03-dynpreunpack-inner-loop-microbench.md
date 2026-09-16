@@ -2,7 +2,7 @@
 
 ## Scope and method
 
-Target: `q4_0-q8_0-IME-m8b-DynPreUnpack-CacheBlocking` inner iteration. The benchmark is independent assembly and does not modify kernel behavior. Each full iteration has one `vl8r.v` (256 B B), four `vle8.v` (4x32 B A), the same eight B physical registers (`v8..v15`), and 16 `smt.vmadot` updating eight m2 accumulators. A/B offsets wrap every 64 iterations inside allocated 8 KiB/16 KiB buffers, so no iteration is out of bounds. Eight accumulator groups are stored after the loop and consumed by a scalar checksum.
+Target: `q4_0-q8_0-IME-m8b-DPU-CB` inner iteration. The benchmark is independent assembly and does not modify kernel behavior. Each full iteration has one `vl8r.v` (256 B B), four `vle8.v` (4x32 B A), the same eight B physical registers (`v8..v15`), and 16 `smt.vmadot` updating eight m2 accumulators. A/B offsets wrap every 64 iterations inside allocated 8 KiB/16 KiB buffers, so no iteration is out of bounds. Eight accumulator groups are stored after the loop and consumed by a scalar checksum.
 
 The runner pins itself to CPU0 and verifies `sched_getcpu()==0`, warms each case three times (4096 iterations), then records seven samples of 200,000 iterations. Compiler barriers and `fence rw,rw` surround the timed call. `rdcycle` is executed before and after every sample. On this K1/Linux image it always returned zero (also the reason the project timer uses monotonic time for `SPACEMIT_X60`), so **direct rdcycle results are invalid**. Reported cycle estimates use measured monotonic nanoseconds times the board's nominal 1.6 GHz, exactly matching `bench/timer.hpp`. Raw output retains both `rdcycle_delta=0` and `duration_ns`; these are frequency-based estimated cycles, not hardware cycle-counter observations.
 

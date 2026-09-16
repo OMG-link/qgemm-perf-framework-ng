@@ -4,6 +4,11 @@
 
 本文梳理基于"mr=8的批量归约方案"的 `q4_0-IME` 动态预解压和 Cache Blocking 的理论预期与实测结果。
 
+> 命名说明：2026-09-16 起，kernel `q4_0-q8_0-IME-m8b-dyn-pre-unpack` 重命名为
+> `q4_0-q8_0-IME-m8b-DPU`，kernel `q4_0-q8_0-IME-m8b-DynPreUnpack-CacheBlocking`
+> 重命名为 `q4_0-q8_0-IME-m8b-DPU-CB`（目录同名）。本文记录的历史测量数据来自重命名
+> 之前，文中表格统一沿用 DPU / DPU-CB 简称。
+
 ## 实验参数
 
 除特别说明外，完整 GEMM 数据来自同一当前二进制、同一目标机 CPU 0 和同一 shape：
@@ -122,9 +127,9 @@ A/W main 在其它尺寸下的长稳态测试结果如下：
 
 ### 2.1 算术换流量
 
-未分块 DynPreUnpack 在每次 GEMM 开始时将完整 Q4_0 W 展开成 int8。compute inner 不再执行 mask、shift 和 zero-point add，但需要读取两倍大小的 W：
+未分块 DPU 在每次 GEMM 开始时将完整 Q4_0 W 展开成 int8。compute inner 不再执行 mask、shift 和 zero-point add，但需要读取两倍大小的 W：
 
-| 每个 compute inner | 动态解压 m8b | 未分块 DynPreUnpack | 变化 |
+| 每个 compute inner | 动态解压 m8b | 未分块 DPU | 变化 |
 |---|---:|---:|---:|
 | A load | 128 B | 128 B | 0 |
 | W load | 128 B packed | 256 B unpacked | +100% |
@@ -134,7 +139,7 @@ A/W main 在其它尺寸下的长稳态测试结果如下：
 
 ### 2.2 总流量和 L2 压力
 
-| 显式 payload/GEMM | 动态解压 m8b | 未分块 DynPreUnpack |
+| 显式 payload/GEMM | 动态解压 m8b | 未分块 DPU |
 |---|---:|---:|
 | A compute reads | 67.5 MiB | 67.5 MiB |
 | W compute reads | 67.5 MiB | 135 MiB |
@@ -157,11 +162,11 @@ A/W main 在其它尺寸下的长稳态测试结果如下：
 | kernel | median cycles | FMA/cycle | 相对基础 m8b |
 |---|---:|---:|---:|
 | m8b，动态解压 | 125,852,839 | 8.9983 | baseline |
-| m8b，未分块 DynPreUnpack | 140,606,664 | 8.0541 | **+11.72% cycles** |
+| m8b，未分块 DPU | 140,606,664 | 8.0541 | **+11.72% cycles** |
 
 ## 3. Cache Blocking：理论预期与实测结果
 
-> **本节结论：**Cache Blocking 理论上可以通过复用 W 解除 L2→L1D 带宽瓶颈。实测中，它比未分块 DynPreUnpack 少 12.01% cycles，比基础 m8b 少 1.69% cycles。
+> **本节结论：**Cache Blocking 理论上可以通过复用 W 解除 L2→L1D 带宽瓶颈。实测中，它比未分块 DPU 少 12.01% cycles，比基础 m8b 少 1.69% cycles。
 
 ### 3.1 分块参数的选择
 
@@ -255,10 +260,10 @@ ceil(M / MC)
 | kernel | median cycles | FMA/cycle | 相对基础 m8b |
 |---|---:|---:|---:|
 | 动态解压 m8b | 125,852,839 | 8.9983 | baseline |
-| 未分块 DynPreUnpack | 140,606,664 | 8.0541 | **+11.72% cycles** |
-| DynPreUnpack + Cache Blocking | 123,726,022 | 9.1530 | **-1.69% cycles** |
+| 未分块 DPU | 140,606,664 | 8.0541 | **+11.72% cycles** |
+| DPU-CB | 123,726,022 | 9.1530 | **-1.69% cycles** |
 
-Cache Blocking 比未分块 DynPreUnpack 少 12.01% cycles，说明分块复用产生了端到端收益；但它仅比基础 m8b 少 1.69% cycles，实际收益相对有限。
+Cache Blocking 比未分块 DPU 少 12.01% cycles，说明分块复用产生了端到端收益；但它仅比基础 m8b 少 1.69% cycles，实际收益相对有限。
 
 ### 3.4 开销测试结果
 
@@ -298,7 +303,7 @@ L1D miss 归因：
 | 阶段 | 做了什么 | 理论预期 | 实测结果 |
 |---|---|---|---:|
 | 动态解压 m8b | baseline | baseline | 125.853M cycles |
-| 未分块 DynPreUnpack | 提前展开完整 W | 删除解压，但 L2→L1D 压力升至 9.60 B/cycle | 140.607M，+11.72% |
+| 未分块 DPU | 提前展开完整 W | 删除解压，但 L2→L1D 压力升至 9.60 B/cycle | 140.607M，+11.72% |
 | Cache Blocking | 在多个 A micro-panels 间复用 8 KiB W micro-panel | 理论带宽压力降至 3.52 B/cycle | 123.726M，-1.69% |
 
 最终结论是：

@@ -121,7 +121,7 @@ pc_pointer_no_gap:
 END pc_pointer_chase
 
 # a0=iterations, a1=A ring, a2=B ring, a3=out, a4=mask.
-# Exact DynPreUnpack inner instruction topology and fixed register assignment.
+# Exact DPU inner instruction topology and fixed register assignment.
 FN pc_dyn_inner
   vsetivli zero,16,e32,m2,ta,ma
   vmv.v.i v16,0; vmv.v.i v18,0; vmv.v.i v20,0; vmv.v.i v22,0

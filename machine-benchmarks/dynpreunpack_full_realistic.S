@@ -1,4 +1,4 @@
-# Real DynPreUnpack compute-body address trace for M=N=1536,K=8960.
+# Real DPU compute-body address trace for M=N=1536,K=8960.
 # a0=sweeps, a1=A panel-major (280*192*288), a2=unpacked B (96*280*512), a3=checksum (512 B).
 # Exactly 5,160,960 K16 inners/sweep: N96 * M192 * (17*16+8) QK32 * 2.
 .macro INIT

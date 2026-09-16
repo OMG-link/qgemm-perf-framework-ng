@@ -7,5 +7,5 @@ ime_add_kernel_sources(SOURCES kernel.cpp
 ime_add_kernel_sources(SOURCES adapter.cpp
     COMPILE_OPTIONS -fopenmp)
 
-add_ime_assembly(kernel.cpp q4_0_q8_0_ime_m8b_dyn_pre_unpack
+add_ime_assembly(kernel.cpp q4_0_q8_0_ime_m8b_DPU_CB
     DEPENDS kernel.h)

@@ -18,7 +18,7 @@ constexpr size_t kCacheLineBytes = 64;
 static_assert(kAQuantBytesPerBlock == 256);
 static_assert(sizeof(block_q8_0_ime_m8) == 288);
 
-struct M8DynPreUnpackState : CommonState {
+struct M8DpuState : CommonState {
     size_t threads = 1;
     std::vector<block_q8_0_ime_m8> packed_a_m8;
     std::vector<uint8_t> packed_a_qs_storage;
@@ -36,7 +36,7 @@ template <typename T> T *align_to_cache_line(std::vector<T> &storage, size_t pay
 }
 
 PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &input) {
-    auto state = std::make_unique<M8DynPreUnpackState>();
+    auto state = std::make_unique<M8DpuState>();
     if (!initialize_q4_0_ime<8>(request, input, *state)) {
         return {nullptr, "expected Q4_0/Q8_0 input"};
     }
@@ -62,7 +62,7 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
 }
 
 void run(KernelState opaque, size_t iterations) noexcept {
-    auto &state = *static_cast<M8DynPreUnpackState *>(opaque);
+    auto &state = *static_cast<M8DpuState *>(opaque);
     const size_t total_b_blocks = (state.n() / kNr) * state.blocks_k();
 
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
@@ -79,13 +79,13 @@ void run(KernelState opaque, size_t iterations) noexcept {
     }
 }
 
-void destroy(KernelState state) noexcept { delete static_cast<M8DynPreUnpackState *>(state); }
+void destroy(KernelState state) noexcept { delete static_cast<M8DpuState *>(state); }
 
 } // namespace
 
-void register_q4_0_ime_m8b_dyn_pre_unpack() {
+void register_q4_0_ime_m8b_dpu() {
     register_kernel({
-        .id = "q4_0-q8_0-IME-m8b-dyn-pre-unpack",
+        .id = "q4_0-q8_0-IME-m8b-DPU",
         .name = "Q4_0 x Q8_0 IME M8 batch reduction dynamic pre-unpack",
         .quantization = QuantizationType::WeightQ4_0ActivationQ8_0,
         .callbacks = {validate_shape<8, 16, 32>, prepare, reset_common, run, export_common, checksum_common, destroy},

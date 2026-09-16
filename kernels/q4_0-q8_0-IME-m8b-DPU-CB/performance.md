@@ -2,7 +2,7 @@
 
 ## Kernel
 
-Kernel: `q4_0-q8_0-IME-m8b-DynPreUnpack-CacheBlocking`
+Kernel: `q4_0-q8_0-IME-m8b-DPU-CB`
 
 ## Test platform and environment
 

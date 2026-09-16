@@ -23,7 +23,7 @@ static_assert(kPanelBytes == 8 * 1024);
 static_assert(kAQuantBytesPerBlock == 256);
 static_assert(sizeof(block_q8_0_ime_m8) == 288);
 
-struct M8DynPreUnpackCacheBlockingState : CommonState {
+struct M8DpuCacheBlockingState : CommonState {
     size_t threads = 1;
     std::vector<block_q8_0_ime_m8> packed_a_m8;
     std::vector<uint8_t> packed_a_qs_storage;
@@ -42,7 +42,7 @@ template <typename T> T *align_to_cache_line(std::vector<T> &storage, size_t pay
 }
 
 PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &input) {
-    auto state = std::make_unique<M8DynPreUnpackCacheBlockingState>();
+    auto state = std::make_unique<M8DpuCacheBlockingState>();
     if (!initialize_q4_0_ime<8>(request, input, *state))
         return {nullptr, "expected Q4_0/Q8_0 input"};
     state->threads = request.threads;
@@ -80,7 +80,7 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
 }
 
 void run(KernelState opaque, size_t iterations) noexcept {
-    auto &state = *static_cast<M8DynPreUnpackCacheBlockingState *>(opaque);
+    auto &state = *static_cast<M8DpuCacheBlockingState *>(opaque);
     const size_t blocks_k = state.blocks_k();
     const size_t tiles_m = state.m() / kMr;
     const size_t tiles_n = state.n() / kNr;
@@ -138,13 +138,13 @@ void run(KernelState opaque, size_t iterations) noexcept {
     }
 }
 
-void destroy(KernelState state) noexcept { delete static_cast<M8DynPreUnpackCacheBlockingState *>(state); }
+void destroy(KernelState state) noexcept { delete static_cast<M8DpuCacheBlockingState *>(state); }
 
 } // namespace
 
-void register_q4_0_ime_m8b_dyn_pre_unpack_cache_blocking() {
+void register_q4_0_ime_m8b_dpu_cb() {
     register_kernel({
-        .id = "q4_0-q8_0-IME-m8b-DynPreUnpack-CacheBlocking",
+        .id = "q4_0-q8_0-IME-m8b-DPU-CB",
         .name = "Q4_0 x Q8_0 IME M8 dynamic pre-unpack cache blocking",
         .quantization = QuantizationType::WeightQ4_0ActivationQ8_0,
         .callbacks = {validate_shape<8, 16, 32>, prepare, reset_common, run, export_common, checksum_common, destroy},
