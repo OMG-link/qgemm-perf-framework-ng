@@ -20,6 +20,12 @@ reviewable and can be adapted to a benchmark adapter independently.
 | `q4_0-q8_0-IME-m4b` | `kernel.cpp`, `SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_BatchRed` | 4x16 batch reduction kernel |
 | `q4_0-q8_0-IME-m8b` | `kernel.cpp`, `SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed` | 8x16 batch reduction kernel |
 
+The `q4_0-q8_0-IME-m4i-CB` and `q4_0-q8_0-IME-m8b-CB` cache-blocked variants do
+not own a microkernel: they declare the M4/M8 microkernel of the corresponding
+base directory and only add a K-panel plus activation-chunk adapter. Their
+directories therefore contain no `kernel.cpp` and register no assembly target,
+and their `kernel.h` documents the single-N-tile call form the blocked loop uses.
+
 The regular and TCM IQ2_XXS variants share the same `kernel.cpp` in each of
 the `iq2_xxs-q8_K-RVV-my-br` and `iq2_xxs-q8_K-RVV-my-ir` directories. CMake
 defines `USE_TCM` for the TCM object targets and supplies the shared

@@ -94,7 +94,9 @@ int main(int argc, char **argv) {
     adapters::register_q4_0_ime_upstream();
     adapters::register_q4_0_ime_m4b();
     adapters::register_q4_0_ime_m4i();
+    adapters::register_q4_0_ime_m4i_cb();
     adapters::register_q4_0_ime_m8b();
+    adapters::register_q4_0_ime_m8b_cb();
     adapters::register_q4_0_ime_m8b_dpu();
     adapters::register_q4_0_ime_m8b_dpu_cb();
     adapters::register_q4_0_ime_m4n32b();
