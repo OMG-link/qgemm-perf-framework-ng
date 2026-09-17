@@ -7,17 +7,22 @@
 #include <cstdint>
 
 // The cache-blocked variant reuses the M4 immediate-reduction microkernel owned
-// by `q4_0-q8_0-IME-m4i`; no second implementation is needed because the
-// blocking only changes how the microkernel is called. The cache-blocked loop
-// passes `count_n = 16` and `ldc = 16`, which selects the single N16 tile form:
+// by `q4_0-q8_0-IME-m4i`; no second implementation is needed because the blocking
+// only changes how the microkernel is called. The microkernel covers one
+// kMr x kNr output tile for a contiguous run of K blocks and accumulates into a
+// caller-owned acc tile, so the blocked loop passes its packed C tile directly:
 //
-//   * `quant_b_data` points at the first K block of a K panel for that tile, and
+//   * `quant_b_data` points at the first K block of a K panel for that tile and
 //     `block_count_k` is the panel block count, so the packed B panel
 //     (KC * 288 B) stays L1D-resident while the activation chunk streams past
 //     it;
-//   * `output` is a contiguous 4 * 16 C tile that the caller accumulates across
-//     K panels.
-void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTRICT quant_a, const uint8_t *GGML_RESTRICT quant_b_data, float *GGML_RESTRICT output, size_t count_n,
-                                                       size_t block_count_k, size_t ldc);
+//   * `acc` is the packed C tile itself, held in MIV (matrix-in-vector) order:
+//     the caller zeroes it once before the first K panel, the kernel adds every
+//     panel's K contributions, and the export loop turns each finished tile into
+//     C rows with `c_unpack_ime_m4_n16()`.
+void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTRICT quant_a, const uint8_t *GGML_RESTRICT quant_b_data, float *GGML_RESTRICT acc, size_t block_count_k);
+
+// Write one MIV tile (`kMr * kNr` floats) to the four rows of C at `ldc` stride.
+void c_unpack_ime_m4_n16(const float *GGML_RESTRICT miv, float *GGML_RESTRICT c, size_t ldc);
 
 #endif

@@ -6,7 +6,19 @@
 #include <cstddef>
 #include <cstdint>
 
+// Batch-reduction microkernel for a single kMr x kNr output tile.
+//
+// The kernel owns the tile shape and the K loop only: it consumes
+// `block_count_k` K blocks of one activation tile (`quant_a_*`, kMr rows) plus
+// the matching packed weight tile (`quant_b_*`, kNr columns, already offset to
+// the first K block by the caller) and accumulates the fp32 result into `acc`,
+// which is a contiguous row-major kMr x kNr tile of kMr * kNr floats.
+//
+// The caller owns the N tiling, the packed B tile offsets and the acc ->
+// C(output) copy. `acc` is deliberately not initialized by the kernel: every
+// batch flush adds to the values already stored in `acc`, so a caller that
+// accumulates over K panels can hand in the (zeroed) C tile itself.
 void SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(const int8_t *GGML_RESTRICT quant_a_qs, const float *GGML_RESTRICT quant_a_scales, const uint8_t *GGML_RESTRICT quant_b_qs,
-                                                                const uint16_t *GGML_RESTRICT quant_b_scales, float *GGML_RESTRICT output, size_t count_n, size_t block_count_k, size_t ldc);
+                                                                const uint16_t *GGML_RESTRICT quant_b_scales, float *GGML_RESTRICT acc, size_t block_count_k);
 
 #endif

@@ -7,6 +7,10 @@
 
 namespace ime::bench::adapters {
 namespace {
+constexpr size_t kMr = 4;
+constexpr size_t kNr = 16;
+constexpr size_t kTileFloats = kMr * kNr;
+
 struct State : CommonState {
     size_t threads = 1;
     Q4_0M4N16ImePackedData q4;
@@ -21,13 +25,21 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
 
 void run(KernelState opaque, size_t iterations) noexcept {
     auto &state = *static_cast<State *>(opaque);
-    constexpr size_t m4_block_size = 4 * (sizeof(float) + QK8_0);
+    constexpr size_t m4_block_size = kMr * (sizeof(float) + QK8_0);
+    const size_t blocks_k = state.blocks_k();
+    const auto *packed_b = reinterpret_cast<const uint8_t *>(state.q4.packed_b.data());
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
 #pragma omp parallel for schedule(static) num_threads(state.threads) if (state.threads > 1)
-        for (size_t tile_m = 0; tile_m < state.m(); tile_m += 4) {
-            const auto *a = reinterpret_cast<const uint8_t *>(state.q4.packed_a_m4.data() + (tile_m / 4) * state.blocks_k() * m4_block_size);
-            SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(a, reinterpret_cast<const uint8_t *>(state.q4.packed_b.data()), state.output().data() + tile_m * state.n(), state.n(), state.blocks_k(),
-                                                              state.n());
+        for (size_t tile_m = 0; tile_m < state.m(); tile_m += kMr) {
+            const auto *a = reinterpret_cast<const uint8_t *>(state.q4.packed_a_m4.data() + (tile_m / kMr) * blocks_k * m4_block_size);
+            float *output_rows = state.output().data() + tile_m * state.n();
+            for (size_t tile_n = 0; tile_n < state.n(); tile_n += kNr) {
+                const auto *b = packed_b + (tile_n / kNr) * blocks_k * sizeof(block_q4_0_ime_n16);
+
+                float tile[kTileFloats] = {};
+                SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(a, b, tile, blocks_k);
+                c_unpack_ime_m4_n16(tile, output_rows + tile_n, state.n());
+            }
         }
     }
 }

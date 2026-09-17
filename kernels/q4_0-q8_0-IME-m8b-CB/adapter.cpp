@@ -103,14 +103,13 @@ void run(KernelState opaque, size_t iterations) noexcept {
                         const float *a_scales = state.packed_a_scales.data() + (panel_base + tile_m * kBlocksPerPanel) * kAScalesPerBlock;
                         float *c_tile = state.packed_c.data() + (tile_m * tiles_n + tile_n_index) * kTileFloats;
 
-                        float tile[kTileFloats];
-                        SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(a_qs, a_scales, b_qs_panel, b_scales_panel, tile, kNr, local_blocks, kNr);
-                        if (block_k == 0) {
-                            std::copy_n(tile, kTileFloats, c_tile);
-                        } else {
-                            for (size_t i = 0; i < kTileFloats; ++i)
-                                c_tile[i] += tile[i];
-                        }
+                        // The microkernel accumulates into the packed C tile, so the
+                        // first K panel hands it a zeroed tile and every later panel
+                        // adds its own K blocks on top: no staging tile, no second C
+                        // pass.
+                        if (block_k == 0)
+                            std::fill_n(c_tile, kTileFloats, 0.0f);
+                        SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(a_qs, a_scales, b_qs_panel, b_scales_panel, c_tile, local_blocks);
                     }
                 }
             }
