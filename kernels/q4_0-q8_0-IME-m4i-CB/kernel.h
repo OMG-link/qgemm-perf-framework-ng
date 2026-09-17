@@ -16,13 +16,9 @@
 //     `block_count_k` is the panel block count, so the packed B panel
 //     (KC * 288 B) stays L1D-resident while the activation chunk streams past
 //     it;
-//   * `acc` is the packed C tile itself, held in MIV (matrix-in-vector) order:
-//     the caller zeroes it once before the first K panel, the kernel adds every
-//     panel's K contributions, and the export loop turns each finished tile into
-//     C rows with `c_unpack_ime_m4_n16()`.
+//   * `acc` is the packed C tile itself (`kMr * kNr` floats, row-major). The
+//     caller zeroes it once before the first K panel and the kernel adds every
+//     panel's K contributions to it.
 void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTRICT quant_a, const uint8_t *GGML_RESTRICT quant_b_data, float *GGML_RESTRICT acc, size_t block_count_k);
-
-// Write one MIV tile (`kMr * kNr` floats) to the four rows of C at `ldc` stride.
-void c_unpack_ime_m4_n16(const float *GGML_RESTRICT miv, float *GGML_RESTRICT c, size_t ldc);
 
 #endif

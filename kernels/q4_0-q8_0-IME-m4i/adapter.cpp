@@ -1,6 +1,7 @@
 #include "adapter_common.h"
 #include "q4_0_common.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "kernel.h"
@@ -38,7 +39,9 @@ void run(KernelState opaque, size_t iterations) noexcept {
 
                 float tile[kTileFloats] = {};
                 SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(a, b, tile, blocks_k);
-                c_unpack_ime_m4_n16(tile, output_rows + tile_n, state.n());
+                for (size_t row = 0; row < kMr; ++row) {
+                    std::copy_n(tile + row * kNr, kNr, output_rows + tile_n + row * state.n());
+                }
             }
         }
     }

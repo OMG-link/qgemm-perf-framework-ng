@@ -33,8 +33,7 @@ static_assert(kBBytesPerBlock == kNr * (QK4_0 / 2) + kNr * sizeof(uint16_t));
 // shared L2/DRAM fill path. This variant splits K into panels and walks an
 // activation chunk inside each panel, so one K panel of packed B is reused by
 // every M tile of the chunk from L1D while the activation stream is served by
-// the shared L2. The C tile is accumulated in a packed buffer across K panels in
-// the microkernel's MIV order and unpacked to C once per (M tile, N tile).
+// the shared L2. The C tile is accumulated in a packed buffer across K panels.
 struct M4CacheBlockingState : CommonState {
     size_t threads = 1;
     Q4_0M4N16ImePackedData q4;               // staged M-major activations and packed B
@@ -109,7 +108,9 @@ void run(KernelState opaque, size_t iterations) noexcept {
             for (size_t tile_n_index = 0; tile_n_index < tiles_n; ++tile_n_index) {
                 const float *c_tile = state.packed_c.data() + (tile_m * tiles_n + tile_n_index) * kTileFloats;
                 float *output_tile = state.output().data() + tile_m * kMr * state.n() + tile_n_index * kNr;
-                c_unpack_ime_m4_n16(c_tile, output_tile, state.n());
+                for (size_t row = 0; row < kMr; ++row) {
+                    std::copy_n(c_tile + row * kNr, kNr, output_tile + row * state.n());
+                }
             }
         }
     }

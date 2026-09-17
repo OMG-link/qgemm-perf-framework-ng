@@ -15,16 +15,15 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTR
     auto A = (const block_q8_0_ime_m4 *)QuantA;
     auto B = (const block_q4_0_ime_n16 *)QuantBData;
 
-    // The caller's acc tile is stored in the microkernel's MIV (matrix-in-vector)
-    // order: four 16-lane accumulators, so the whole tile is loaded once here and
-    // stored once after the K loop. The caller zeroes it before the first call,
-    // the kernel only adds to it.
-    size_t vl_m2 = __riscv_vsetvlmax_e32m2();
-    vfloat32m2_t acc_0 = __riscv_vle32_v_f32m2(acc + 0 * kOutputN, vl_m2);
-    vfloat32m2_t acc_1 = __riscv_vle32_v_f32m2(acc + 1 * kOutputN, vl_m2);
-    vfloat32m2_t acc_2 = __riscv_vle32_v_f32m2(acc + 2 * kOutputN, vl_m2);
-    vfloat32m2_t acc_3 = __riscv_vle32_v_f32m2(acc + 3 * kOutputN, vl_m2);
-    asm volatile("" : "+vr"(acc_0), "+vr"(acc_1), "+vr"(acc_2), "+vr"(acc_3));
+    vfloat32m2_t acc_0, acc_1, acc_2, acc_3;
+
+    {
+        size_t vl = __riscv_vsetvlmax_e32m2();
+        acc_0 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+        acc_1 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+        acc_2 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+        acc_3 = __riscv_vfmv_v_f_f32m2(0.0f, vl);
+    }
 
     for (size_t bk = 0; bk < BlockCountK; ++bk) {
         auto &curr_B = B[bk];
@@ -137,67 +136,69 @@ void SQ4BitGemmM4Kernel_CompInt8_ScaleFp16_Impl_Intrin(const uint8_t *GGML_RESTR
         acc_3 = __riscv_vfmacc_vv_f32m2(acc_3, inner_f3, scale_3, vl_m2);
     }
 
-    __riscv_vse32_v_f32m2(acc + 0 * kOutputN, acc_0, vl_m2);
-    __riscv_vse32_v_f32m2(acc + 1 * kOutputN, acc_1, vl_m2);
-    __riscv_vse32_v_f32m2(acc + 2 * kOutputN, acc_2, vl_m2);
-    __riscv_vse32_v_f32m2(acc + 3 * kOutputN, acc_3, vl_m2);
-}
+    vfloat32m8_t acc_tile = __riscv_vcreate_v_f32m2_f32m8(acc_0, acc_1, acc_2, acc_3);
 
-// Unpack one MIV tile into C. Chunk c of the tile holds the 4-float group c / 2
-// of row 2 * (c % 2) followed by the same group of the next row, so the unpack
-// writes each of the four rows as four 4-float groups.
-void c_unpack_ime_m4_n16(const float *GGML_RESTRICT miv, float *GGML_RESTRICT c, size_t ldc) {
-    size_t vl_m8 = __riscv_vsetvlmax_e32m8();
-    size_t vl_mf2 = __riscv_vsetvlmax_e32mf2();
-    size_t vl_m1 = __riscv_vsetvlmax_e32m1();
-    vfloat32m8_t tile = __riscv_vle32_v_f32m8(miv, vl_m8);
+    // The tile result is added to the caller's acc tile one 4-float group at a
+    // time: the low 4 lanes of each unpack chunk hold an even row's group, its
+    // high 4 lanes the following odd row's group. Plain 4-lane loads, adds and
+    // stores keep the epilogue independent.
+    auto accumulate_unpack = [](vfloat32m8_t acc_tile, float *dst, size_t row_stride) {
+        float *row0 = dst;
+        float *row1 = row0 + row_stride;
+        float *row2 = row1 + row_stride;
+        float *row3 = row2 + row_stride;
 
-    float *row0 = c;
-    float *row1 = row0 + ldc;
-    float *row2 = row1 + ldc;
-    float *row3 = row2 + ldc;
+        size_t vl_mf2 = __riscv_vsetvlmax_e32mf2();
+        size_t vl_m1 = __riscv_vsetvlmax_e32m1();
 
-    auto store_low = [&](vfloat32m1_t value, float *where) {
-        __riscv_vse32_v_f32mf2(where, __riscv_vlmul_trunc_v_f32m1_f32mf2(value), vl_mf2);
+        vfloat32m1_t acc_0 = __riscv_vget_v_f32m8_f32m1(acc_tile, 0);
+        vfloat32m1_t acc_1 = __riscv_vget_v_f32m8_f32m1(acc_tile, 1);
+        vfloat32m1_t acc_2 = __riscv_vget_v_f32m8_f32m1(acc_tile, 2);
+        vfloat32m1_t acc_3 = __riscv_vget_v_f32m8_f32m1(acc_tile, 3);
+        vfloat32m1_t acc_4 = __riscv_vget_v_f32m8_f32m1(acc_tile, 4);
+        vfloat32m1_t acc_5 = __riscv_vget_v_f32m8_f32m1(acc_tile, 5);
+        vfloat32m1_t acc_6 = __riscv_vget_v_f32m8_f32m1(acc_tile, 6);
+        vfloat32m1_t acc_7 = __riscv_vget_v_f32m8_f32m1(acc_tile, 7);
+
+        auto group_low = [&](vfloat32m1_t value) {
+            return __riscv_vlmul_trunc_v_f32m1_f32mf2(value);
+        };
+        auto group_high = [&](vfloat32m1_t value) {
+            return __riscv_vlmul_trunc_v_f32m1_f32mf2(__riscv_vslidedown_vx_f32m1(value, 4, vl_m1));
+        };
+        auto accumulate = [&](vfloat32mf2_t value, float *where) {
+            vfloat32mf2_t previous = __riscv_vle32_v_f32mf2(where, vl_mf2);
+            __riscv_vse32_v_f32mf2(where, __riscv_vfadd_vv_f32mf2(value, previous, vl_mf2), vl_mf2);
+        };
+
+        accumulate(group_low(acc_0), row0);
+        row0 += 4;
+        accumulate(group_high(acc_0), row1);
+        row1 += 4;
+        accumulate(group_low(acc_1), row2);
+        row2 += 4;
+        accumulate(group_high(acc_1), row3);
+        row3 += 4;
+        accumulate(group_low(acc_2), row0);
+        row0 += 4;
+        accumulate(group_high(acc_2), row1);
+        row1 += 4;
+        accumulate(group_low(acc_3), row2);
+        row2 += 4;
+        accumulate(group_high(acc_3), row3);
+        row3 += 4;
+        accumulate(group_low(acc_4), row0);
+        row0 += 4;
+        accumulate(group_high(acc_4), row1);
+        row1 += 4;
+        accumulate(group_low(acc_5), row2);
+        row2 += 4;
+        accumulate(group_high(acc_5), row3);
+        row3 += 4;
+        accumulate(group_low(acc_6), row0);
+        accumulate(group_high(acc_6), row1);
+        accumulate(group_low(acc_7), row2);
+        accumulate(group_high(acc_7), row3);
     };
-    auto store_high = [&](vfloat32m1_t value, float *where) {
-        __riscv_vse32_v_f32mf2(where, __riscv_vlmul_trunc_v_f32m1_f32mf2(__riscv_vslidedown_vx_f32m1(value, 4, vl_m1)), vl_mf2);
-    };
-
-    vfloat32m1_t chunk = __riscv_vget_v_f32m8_f32m1(tile, 0);
-    store_low(chunk, row0);
-    row0 += 4;
-    store_high(chunk, row1);
-    row1 += 4;
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 1);
-    store_low(chunk, row2);
-    row2 += 4;
-    store_high(chunk, row3);
-    row3 += 4;
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 2);
-    store_low(chunk, row0);
-    row0 += 4;
-    store_high(chunk, row1);
-    row1 += 4;
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 3);
-    store_low(chunk, row2);
-    row2 += 4;
-    store_high(chunk, row3);
-    row3 += 4;
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 4);
-    store_low(chunk, row0);
-    row0 += 4;
-    store_high(chunk, row1);
-    row1 += 4;
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 5);
-    store_low(chunk, row2);
-    row2 += 4;
-    store_high(chunk, row3);
-    row3 += 4;
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 6);
-    store_low(chunk, row0);
-    store_high(chunk, row1);
-    chunk = __riscv_vget_v_f32m8_f32m1(tile, 7);
-    store_low(chunk, row2);
-    store_high(chunk, row3);
+    accumulate_unpack(acc_tile, acc, kOutputN);
 }
