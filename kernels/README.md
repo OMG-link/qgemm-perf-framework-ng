@@ -24,7 +24,9 @@ The `q4_0-q8_0-IME-m4i-CB` and `q4_0-q8_0-IME-m8b-CB` cache-blocked variants do
 not own a microkernel: they declare the M4/M8 microkernel of the corresponding
 base directory and only add a K-panel plus activation-chunk adapter. Their
 directories therefore contain no `kernel.cpp` and register no assembly target,
-and their `kernel.h` documents the single-N-tile call form the blocked loop uses.
+and their `kernel.h` documents the call form the blocked loop uses: one N tile
+per call, with the microkernel accumulating into a caller-owned `acc` tile, so
+the blocked loop passes its packed C tile straight through.
 
 The regular and TCM IQ2_XXS variants share the same `kernel.cpp` in each of
 the `iq2_xxs-q8_K-RVV-my-br` and `iq2_xxs-q8_K-RVV-my-ir` directories. CMake

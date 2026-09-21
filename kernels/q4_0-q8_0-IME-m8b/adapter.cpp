@@ -11,11 +11,16 @@ namespace ime::bench::adapters {
 namespace {
 
 constexpr size_t kMr = 8;
+constexpr size_t kNr = 16;
 constexpr size_t kAQuantBytesPerBlock = kMr * QK8_0;
 constexpr size_t kAScalesPerBlock = kMr;
+constexpr size_t kPackedBQBytesPerBlock = kNr * (QK4_0 / 2);
+constexpr size_t kPackedBScalesPerBlock = kNr;
+constexpr size_t kTileFloats = kMr * kNr;
 constexpr size_t kPackedAChunkOrder[kMr] = {0, 1, 4, 5, 2, 3, 6, 7};
 constexpr size_t kCacheLineBytes = 64;
 static_assert(kAQuantBytesPerBlock == 256);
+static_assert(kPackedBQBytesPerBlock == 256);
 static_assert(sizeof(block_q8_0_ime_m8) == 288);
 
 struct M8State : CommonState {
@@ -62,14 +67,26 @@ PrepareResult prepare(const BenchmarkRequest &request, const BenchmarkInput &inp
 
 void run(KernelState opaque, size_t iterations) noexcept {
     auto &state = *static_cast<M8State *>(opaque);
+    const size_t blocks_k = state.blocks_k();
     for (size_t iteration = 0; iteration < iterations; ++iteration) {
 #pragma omp parallel for schedule(static) num_threads(state.threads) if (state.threads > 1)
         for (size_t tile_m = 0; tile_m < state.m(); tile_m += kMr) {
-            const size_t a_block = (tile_m / kMr) * state.blocks_k();
+            const size_t a_block = (tile_m / kMr) * blocks_k;
             const int8_t *a_qs = state.packed_a_qs + a_block * kAQuantBytesPerBlock;
             const float *a_scales = state.packed_a_scales + a_block * kAScalesPerBlock;
-            SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(a_qs, a_scales, state.packed_b_qs.data(), state.packed_b_scales.data(), state.output().data() + tile_m * state.n(), state.n(),
-                                                                       state.blocks_k(), state.n());
+            float *output_rows = state.output().data() + tile_m * state.n();
+            for (size_t tile_n = 0; tile_n < state.n(); tile_n += kNr) {
+                const size_t b_block = (tile_n / kNr) * blocks_k;
+                const uint8_t *b_qs = state.packed_b_qs.data() + b_block * kPackedBQBytesPerBlock;
+                const uint16_t *b_scales = state.packed_b_scales.data() + b_block * kPackedBScalesPerBlock;
+
+                float acc[kTileFloats] = {};
+                SQ4BitGemmM8Kernel_CompInt8_ScaleFp16_Impl_Intrin_BatchRed(a_qs, a_scales, b_qs, b_scales, acc, blocks_k);
+
+                for (size_t row = 0; row < kMr; ++row) {
+                    std::copy_n(acc + row * kNr, kNr, output_rows + tile_n + row * state.n());
+                }
+            }
         }
     }
 }
