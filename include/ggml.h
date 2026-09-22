@@ -1,5 +1,5 @@
-#ifndef IME_LLAMA_GGML_H
-#define IME_LLAMA_GGML_H
+#ifndef PFNG_LLAMA_GGML_H
+#define PFNG_LLAMA_GGML_H
 
 #include <cassert>
 #include <cmath>

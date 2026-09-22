@@ -1,7 +1,7 @@
 #include "adapter_common.h"
 
 #include <algorithm>
-namespace ime::bench::adapters {
+namespace pfng::bench::adapters {
 
 void reset_common(KernelState opaque) {
     auto &state = *static_cast<CommonState *>(opaque);
@@ -24,4 +24,4 @@ double checksum_common(KernelState opaque) {
 
 void destroy_common(KernelState state) noexcept { delete static_cast<CommonState *>(state); }
 
-} // namespace ime::bench::adapters
+} // namespace pfng::bench::adapters

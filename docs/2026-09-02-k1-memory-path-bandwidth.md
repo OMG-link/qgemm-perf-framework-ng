@@ -1,3 +1,10 @@
+# Archived experiment
+
+The TCM-dependent machine benchmark used by this historical experiment was
+removed from the active build during the platform-configuration refactor. This
+document is retained as an experimental record; its build and run commands are
+not part of the current supported workflow.
+
 # SpacemiT K1 数据通路带宽模型
 
 ## 1. 结论摘要

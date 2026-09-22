@@ -1,5 +1,5 @@
-#ifndef IME_BENCH_KERNEL_REGISTRY_H
-#define IME_BENCH_KERNEL_REGISTRY_H
+#ifndef PFNG_BENCH_KERNEL_REGISTRY_H
+#define PFNG_BENCH_KERNEL_REGISTRY_H
 
 #include <cstddef>
 #include <cstdint>
@@ -10,8 +10,9 @@
 #include <vector>
 
 #include "ggml.h"
+#include "platform.h"
 
-namespace ime::bench {
+namespace pfng::bench {
 
 struct PerfEventSpec {
     std::string name;
@@ -82,7 +83,14 @@ struct ExportResult {
     std::string error;
 };
 
+struct PeakPerformance {
+    double operation_count = 0.0;
+    double operations_per_cycle = 0.0;
+    std::string_view operation_name;
+};
+
 struct KernelCallbacks {
+    PeakPerformance (*peak_performance)(const BenchmarkRequest &request);
     ValidationResult (*validate)(const BenchmarkRequest &request);
     PrepareResult (*prepare)(const BenchmarkRequest &request, const BenchmarkInput &input);
     void (*reset)(KernelState state);
@@ -97,12 +105,15 @@ struct KernelRegistration {
     std::string_view name;
     QuantizationType quantization;
     KernelCallbacks callbacks;
+    PlatformId platform = PlatformId::Unknown;
 };
 
 void register_kernel(const KernelRegistration &registration);
 std::span<const KernelRegistration> registered_kernels();
 const KernelRegistration *find_kernel(std::string_view id);
+bool kernel_supports_platform(const KernelRegistration &kernel,
+                              PlatformId platform) noexcept;
 
-} // namespace ime::bench
+} // namespace pfng::bench
 
 #endif

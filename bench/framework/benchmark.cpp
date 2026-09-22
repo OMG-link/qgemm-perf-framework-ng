@@ -10,7 +10,7 @@
 #include "llama_reference.h"
 #include "perf.h"
 
-namespace ime::bench {
+namespace pfng::bench {
 
 BenchmarkInput OwnedQ4_0Q8_0Input::view() const {
     return Q4_0Q8_0Input{m, n, k, activation, weight};
@@ -106,7 +106,11 @@ OwnedBenchmarkInput create_input(QuantizationType type, const BenchmarkRequest &
 BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkRequest &request,
                               const BenchmarkInput &input) {
     BenchmarkResult result;
-    result.kernel_id = std::string(kernel.id);
+    if (!kernel_supports_platform(kernel, build_target_platform())) {
+        result.message = "kernel is not valid for build platform " +
+                         std::string(platform_name(build_target_platform()));
+        return result;
+    }
     const auto validation = kernel.callbacks.validate(request);
     if (!validation.supported) {
         result.skipped = true;
@@ -259,11 +263,17 @@ BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkR
     }
     result.checksum = kernel.callbacks.checksum(prepared.state);
     if (has_cycles && result.median_cycles) {
-        const double fma = static_cast<double>(request.m) * request.n * request.k;
-        result.fma_per_cycle = fma / result.median_cycles;
-        result.utilization_percent = result.fma_per_cycle / 128.0 * 100.0;
+        const auto peak = kernel.callbacks.peak_performance(request);
+        if (peak.operation_count <= 0.0 || peak.operations_per_cycle <= 0.0 || peak.operation_name.empty()) {
+            result.message = "kernel returned an invalid peak-performance model";
+            return result;
+        }
+        result.operations_per_cycle = peak.operation_count / result.median_cycles;
+        result.peak_operations_per_cycle = peak.operations_per_cycle;
+        result.operation_name = peak.operation_name;
+        result.utilization_percent = result.operations_per_cycle / peak.operations_per_cycle * 100.0;
     }
     return result;
 }
 
-} // namespace ime::bench
+} // namespace pfng::bench

@@ -20,7 +20,8 @@ def run(command: list[str], *, input_text: str | None = None) -> subprocess.Comp
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--remote", default="spacemit-k1")
+    parser.add_argument("--remote", required=True)
+    parser.add_argument("--platform", required=True, choices=("spacemit-k1-a60",))
     parser.add_argument("--binary", type=pathlib.Path, required=True)
     parser.add_argument("--cpus", default="0,1,2,3")
     parser.add_argument("--samples", type=int, default=5)

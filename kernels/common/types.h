@@ -1,5 +1,5 @@
-#ifndef IME_KERNEL_TYPES_H
-#define IME_KERNEL_TYPES_H
+#ifndef PFNG_KERNEL_TYPES_H
+#define PFNG_KERNEL_TYPES_H
 
 #include "ggml.h"
 

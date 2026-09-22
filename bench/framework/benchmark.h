@@ -1,9 +1,9 @@
-#ifndef IME_BENCH_BENCHMARK_H
-#define IME_BENCH_BENCHMARK_H
+#ifndef PFNG_BENCH_BENCHMARK_H
+#define PFNG_BENCH_BENCHMARK_H
 
 #include "kernel_registry.h"
 
-namespace ime::bench {
+namespace pfng::bench {
 
 struct OwnedQ4_0Q8_0Input {
     size_t m = 0;
@@ -44,7 +44,6 @@ struct PerfMetricResult {
 };
 
 struct BenchmarkResult {
-    std::string kernel_id;
     bool skipped = false;
     bool verified = false;
     bool verification_passed = false;
@@ -54,7 +53,9 @@ struct BenchmarkResult {
     std::vector<PerfMetricResult> perf_metrics;
     size_t iterations = 0;
     double checksum = 0.0;
-    double fma_per_cycle = 0.0;
+    double operations_per_cycle = 0.0;
+    double peak_operations_per_cycle = 0.0;
+    std::string operation_name;
     double utilization_percent = 0.0;
     float max_absolute_error = 0.0f;
     float max_relative_error = 0.0f;
@@ -67,6 +68,6 @@ OwnedBenchmarkInput create_input(QuantizationType type, const BenchmarkRequest &
 BenchmarkResult run_benchmark(const KernelRegistration &kernel, const BenchmarkRequest &request,
                               const BenchmarkInput &input);
 
-} // namespace ime::bench
+} // namespace pfng::bench
 
 #endif

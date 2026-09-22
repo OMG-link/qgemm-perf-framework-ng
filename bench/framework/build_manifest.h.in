@@ -1,0 +1,25 @@
+#ifndef PFNG_BENCH_BUILD_MANIFEST_H
+#define PFNG_BENCH_BUILD_MANIFEST_H
+
+#include <array>
+#include <cstddef>
+#include <string_view>
+
+namespace pfng::bench {
+
+inline constexpr std::string_view kBuildTargetPlatform = "@PFNG_PLATFORM_ID@";
+inline constexpr std::string_view kBuildPlatformDisplayName = "@PFNG_PLATFORM_DISPLAY_NAME@";
+inline constexpr std::string_view kBuildTargetArch = "@PFNG_PLATFORM_ARCH@";
+inline constexpr std::string_view kBuildTargetTune = "@PFNG_PLATFORM_TUNE@";
+inline constexpr std::string_view kBuildCompiler = "@CMAKE_CXX_COMPILER@";
+inline constexpr std::string_view kBuildCompilerVersion = "@CMAKE_CXX_COMPILER_VERSION@";
+inline constexpr size_t kBuildFirstCpu = @PFNG_PLATFORM_FIRST_CPU@;
+inline constexpr size_t kBuildLastCpu = @PFNG_PLATFORM_LAST_CPU@;
+inline constexpr size_t kBuildMaxThreads = @PFNG_PLATFORM_MAX_THREADS@;
+inline constexpr std::array kBuildDeviceTreeCompatibles = {
+    @PFNG_PLATFORM_COMPATIBLE_INITIALIZERS@
+};
+
+} // namespace pfng::bench
+
+#endif

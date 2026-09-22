@@ -1,100 +1,170 @@
 # perf-framework-ng
 
-`perf-framework-ng` is a next-generation performance testing framework for
-all kernels. It provides a self-contained cross-build, correctness-checking,
-benchmarking, and profiling environment.
+`perf-framework-ng` is a RISC-V kernel correctness, benchmarking, and profiling
+framework. Every build directory targets exactly one platform and produces a
+standalone executable for that platform.
 
-## Build and run
+## Supported platforms
 
-```bash
-./compile-and-test.sh configure
-./compile-and-test.sh build
-./compile-and-test.sh test
-./compile-and-test.sh run --list
-./compile-and-test.sh run --kernel ID|all --m M --n N --k K
-./compile-and-test.sh asm
-./compile-and-test.sh clean
+The supported target platform IDs are:
+
+```text
+spacemit-k1-a60
+spacemit-k1-x60
 ```
 
-`configure` generates the build files and compilation database. `build`
-compiles the project, while `test` configures, rebuilds, and runs the available
-correctness and performance checks. `run` executes the benchmark and supports
-selecting a registered kernel or all registered kernels. `asm` generates
-assembly output and `clean` removes generated build artifacts.
+They are independent build targets with separate profile files and complete
+metadata. They happen to use the same compiler, compiler tuning name, SSH
+destination, and Device Tree compatible, but neither profile includes,
+inherits, or falls back to the other.
 
-The toolchain, compiler, deployment target, and build directory can be
-overridden with `TOOLCHAIN_DIR`, `CXX`, `DEPLOYMENT_SERVER`, and `BUILD_DIR`.
+| Platform | `-march` | Kernels | Allowed CPUs |
+|---|---|---|---|
+| `spacemit-k1-a60` | `rv64gcv_zvfh_zicbop_zba_xsmtvdot` | RVV and IME | 0–3 |
+| `spacemit-k1-x60` | `rv64gcv_zvfh_zicbop_zba` | RVV only | 0–7 |
 
-The IQ2_XXS TCM variants require a RISC-V `fine_mm_*` runtime. CMake detects
-`../tcm/libfine_tcm_mm.a` when present; otherwise pass
-`-DIME_TCM_RUNTIME=/absolute/path/to/libfine_tcm_mm.a`. Use
-`-DIME_ENABLE_TCM=OFF` to build only the non-TCM variants. The benchmark owns
-the allocator lifecycle and initializes a 256 KiB TCM pool before first use.
+The compiler tuning argument remains `-mtune=spacemit-x60` for both profiles
+because that is the name recognized by the compiler. It is metadata declared
+independently in each profile and is not used as the project platform ID.
+
+## Build configuration
+
+The target platform has no default and must always be explicit:
+
+```bash
+./compile-and-test.sh build --platform spacemit-k1-a60
+./compile-and-test.sh build --platform spacemit-k1-x60
+```
+
+Only the target system facts are pinned in `CMakeLists.txt`, before `project()`:
+
+```cmake
+if(NOT CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_SYSTEM_NAME Linux)
+    set(CMAKE_SYSTEM_PROCESSOR riscv64)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+endif()
+```
+
+CMake needs the target system before `project()`, so these values cannot be
+ordinary project options. They are stable project facts and contain no
+machine-local paths.
+
+The compiler is deliberately not pinned in the repository. It is resolved in
+this order:
+
+```text
+--cxx FILE  >  .pfng-workspace.json  >  error
+```
+
+`.pfng-workspace.json` is ignored by Git and binds each platform independently.
+Copy `pfng-workspace.example.json` to create it:
+
+```json
+{
+  "platforms": {
+    "spacemit-k1-a60": { "cxx": "/absolute/path/to/clang++" },
+    "spacemit-k1-x60": { "cxx": "/absolute/path/to/clang++" }
+  }
+}
+```
+
+Both entries are independent even when they intentionally contain the same
+path.
+
+The default build directory is derived from the explicit platform:
+
+```text
+build/spacemit-k1-a60/
+build/spacemit-k1-x60/
+```
+
+Direct CMake use needs the platform and the compiler path, since the repository
+does not provide one:
+
+```bash
+cmake -S . -B build/spacemit-k1-a60 -G Ninja \
+  -DPFNG_TARGET_PLATFORM=spacemit-k1-a60 \
+  -DCMAKE_CXX_COMPILER=/absolute/path/to/clang++ \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build build/spacemit-k1-a60 --target pfng-bench
+```
+
+A `CXX` environment variable or `-DCMAKE_TOOLCHAIN_FILE=<file>` also satisfies
+the compiler requirement, for example when a full external toolchain that pins a
+sysroot should take over.
+
+## Run
+
+The SSH target also has no default:
+
+```bash
+./compile-and-test.sh run \
+  --platform spacemit-k1-a60 \
+  --remote spacemit-k1 \
+  --list
+
+./compile-and-test.sh run \
+  --platform spacemit-k1-a60 \
+  --remote spacemit-k1 \
+  --kernel q4_0-q8_0-IME-m8b --m 480 --n 1536 --k 1536
+```
+
+`--remote` is an SSH destination and need not equal the platform ID. Before
+running a benchmark, the wrapper uploads the binary and executes
+`--check-platform`. The executable reads the Linux Device Tree `compatible`
+property and rejects a board that does not match its build platform.
+
+Both current profiles use the SSH destination `spacemit-k1`. The wrapper reads
+the allowed CPU range from that build's manifest: an A60 run may use at most 4
+threads pinned from CPU 0, while an X60 run may use at most 8 threads pinned
+from CPU 0.
+
+Useful executable queries are:
+
+```text
+--build-info       print embedded build platform and compiler information
+--platform-info    detect and print the runtime board
+--check-platform   verify runtime board against the embedded build platform
+--list             list kernels built for this platform
+```
 
 ## Benchmark options
 
-The benchmark accepts the following general options:
-
 ```text
---list
 --kernel ID|all
 --m M --n N --k K
 --warmup N
 --samples N
---iterations N       # omitted: calibrate automatically
---threads N          # 1-4; omitted: single-threaded
+--iterations N
+--threads N
 --no-verify
---perf-events LIST    # replace the default cycles event with a comma-separated list
---perf-event EVENT    # append one event; may be repeated
+--perf-events LIST
+--perf-event EVENT
 ```
 
-`q4_0-q8_0-IME-m4i` and the three `q4_0-q8_0-IME-m8b` variants support OpenMP parallel execution.
-Pass `--threads N` to select the runtime thread count. The default is one thread,
-so kernels without multi-threading support retain their existing behavior. The
-remote runner pins an N-thread run to CPU 0 through CPU N-1.
+The default event is `cycles`. Built-in event names include `cycles`,
+`instructions`, `task-clock`, cache and DTLB events. Platform-specific raw PMU
+events use `raw:NAME:CONFIG`.
 
-The default event list is `cycles`. Built-in event names are:
+Each kernel declares its supported platforms in its local `CMakeLists.txt`.
+All RVV kernels declare both current targets; IME kernels declare only A60. The
+build includes only kernels valid for the selected platform.
 
-```text
-cycles,instructions,task-clock,page-faults
-l1d-access,l1d-miss,llc-access,llc-miss
-dtlb-access,dtlb-miss
-```
+Implementation directories are named after the implementation dependency when
+possible:
 
-Machine-specific raw PMU events use `raw:NAME:CONFIG`, where `CONFIG` accepts
-decimal or `0x` notation. For example, the SpacemiT X60 vector-load and L1D
-load-miss events can be measured together with cycles using:
+- `implementations/rvv-vlen256/` requires at least, and in some cases exactly,
+  a 256-bit VLEN;
+- `implementations/rvv/` is not restricted to a minimum 256-bit VLEN;
+- `implementations/smt-ime1/` uses the IME instruction extension.
 
-```bash
-./compile-and-test.sh run --kernel ID --m M --n N --k K \
-  --perf-events cycles,raw:vector-load:0x39,raw:l1d-miss:0x5
-```
+An implementation remains platform-named when it embeds board parameters; the
+cache-blocked kernels therefore remain under
+`implementations/spacemit-k1-a60/`.
 
-Perf counters form one pinned event group and are enabled only around each timed
-kernel callback. Input preparation, verification, warmup, state reset, checksum,
-and output formatting are outside the measured region. Each metric is reported
-per benchmark iteration with its minimum running percentage. A result is
-rejected if any counter runs for less than 99% of the enabled time; reduce the
-event list if the hardware cannot schedule the complete group. Automatic
-iteration calibration always uses a separate cycles counter, so a requested
-event list does not need to contain `cycles`. FMA/cycle is unavailable when
-`cycles` is omitted.
+## TCM status
 
-Each registered kernel provides its own implementation, adapter, layout, and
-shape validation. The framework keeps kernel-specific details out of the
-common benchmark path, verifies results before measurement by default, and
-reports timing and hardware-counter metrics together with an output checksum.
-
-## Profiling
-
-The profiling tools support repeatable remote Linux `perf` measurements without
-instrumenting kernel code. They preserve raw profiling data, the benchmark
-binary, environment information, reports, and machine-readable summaries in
-their configured artifact directory.
-
-## Generated files
-
-Generated binaries, objects, assembly, CMake files, compilation databases, and
-profiling artifacts are kept in ignored build or artifact directories. Source
-files contain the framework, kernel implementations, adapters, public
-interfaces, and benchmark utilities.
+TCM-backed IQ2 variants and the TCM memory-path machine benchmark are excluded
+from the active build while their cross-platform model is reconsidered. The
+current executable neither registers TCM kernels nor links a TCM allocator.

@@ -15,7 +15,7 @@
 
 #include "framework/kernel_registry.h"
 
-namespace ime::bench {
+namespace pfng::bench {
 
 struct PerfEventValue {
     uint64_t value = 0;
@@ -115,6 +115,6 @@ inline PerfEventSpec cycles_event() {
     return {"cycles", PERF_TYPE_HARDWARE, PERF_COUNT_HW_CPU_CYCLES};
 }
 
-} // namespace ime::bench
+} // namespace pfng::bench
 
 #endif

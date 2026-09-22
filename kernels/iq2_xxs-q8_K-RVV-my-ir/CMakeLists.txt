@@ -1,17 +1,15 @@
-ime_add_kernel_sources(SOURCES kernel.cpp)
-add_ime_assembly(kernel.cpp iq2_xxs_q8_K_rvv_my_ir
-    DEPENDS
-        ../iq2_xxs-q8_K-RVV-common/gemm.h
-        ../iq2_xxs-q8_K-RVV-common/ggml_min.h
-)
+pfng_declare_kernel(
+    ID iq2_xxs-q8_K-RVV-my-ir
+    NAME "IQ2_XXS/Q8_K RVV custom 12x32 immediate-reduce"
+    QUANTIZATION WeightIQ2_XXSActivationQ8_K
+    REGISTER_FUNCTION register_iq2_xxs_rvv_my_ir
+    PLATFORMS spacemit-k1-a60 spacemit-k1-x60)
 
-if(IME_HAVE_TCM)
-    ime_add_kernel_object(iq2_xxs_rvv_ir_tcm_objects
-        SOURCES kernel.cpp
-        INCLUDE_DIRECTORIES ${CMAKE_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
-        COMPILE_DEFINITIONS
-            USE_TCM
-            ggml_gemm_iq2_xxs_q8_K_ir=ggml_gemm_iq2_xxs_q8_K_ir_tcm
-            pack_a_iq2_xxs_ir=pack_a_iq2_xxs_ir_tcm
+if(PFNG_CURRENT_KERNEL_ENABLED)
+    pfng_add_kernel_sources(SOURCES implementations/rvv-vlen256/kernel.cpp)
+    add_pfng_assembly(implementations/rvv-vlen256/kernel.cpp iq2_xxs_q8_K_rvv_my_ir
+        DEPENDS
+            ../iq2_xxs-q8_K-RVV-common/gemm.h
+            ../iq2_xxs-q8_K-RVV-common/ggml_min.h
     )
 endif()

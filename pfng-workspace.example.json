@@ -1,0 +1,10 @@
+{
+  "platforms": {
+    "spacemit-k1-a60": {
+      "cxx": "/absolute/path/to/clang++"
+    },
+    "spacemit-k1-x60": {
+      "cxx": "/absolute/path/to/clang++"
+    }
+  }
+}

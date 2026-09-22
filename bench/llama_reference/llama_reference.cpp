@@ -8,7 +8,7 @@
 
 #include "iq2_xxs.h"
 
-namespace ime::bench::llama_reference {
+namespace pfng::bench::llama_reference {
 
 void quantize_row_q4_0(const float *input, block_q4_0 *output, size_t count) {
     assert(count % QK4_0 == 0);
@@ -214,4 +214,4 @@ std::vector<float> compute(QuantizationType type, const BenchmarkInput &generic_
     return computers.at(static_cast<size_t>(type))(generic_input);
 }
 
-} // namespace ime::bench::llama_reference
+} // namespace pfng::bench::llama_reference

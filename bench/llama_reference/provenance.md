@@ -8,5 +8,5 @@ extracts derived from llama.cpp commit `314e72934`:
 - `ggml/src/ggml-cpu/spacemit/repack.cpp`: Q4_0 N16 repack semantics used by adapters.
 
 Unrelated GGML types and runtime dependencies were removed and the routines
-were placed in the `ime::bench::llama_reference` C++ namespace. The build does
+were placed in the `pfng::bench::llama_reference` C++ namespace. The build does
 not include or link files from an external llama.cpp checkout.

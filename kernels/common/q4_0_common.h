@@ -1,5 +1,5 @@
-#ifndef IME_BENCH_Q4_0_COMMON_H
-#define IME_BENCH_Q4_0_COMMON_H
+#ifndef PFNG_BENCH_Q4_0_COMMON_H
+#define PFNG_BENCH_Q4_0_COMMON_H
 
 #include <cstring>
 
@@ -8,7 +8,7 @@
 #include "ime1_dispatch.h"
 #include "llama_reference.h"
 
-namespace ime::bench::adapters {
+namespace pfng::bench::adapters {
 
 struct Q4_0M4N16ImePackedData {
     std::vector<std::byte> packed_a_m4;
@@ -122,6 +122,6 @@ bool initialize_q4_0_ime(const BenchmarkRequest &request,
     return true;
 }
 
-} // namespace ime::bench::adapters
+} // namespace pfng::bench::adapters
 
 #endif

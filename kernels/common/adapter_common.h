@@ -1,12 +1,12 @@
-#ifndef IME_BENCH_ADAPTER_COMMON_H
-#define IME_BENCH_ADAPTER_COMMON_H
+#ifndef PFNG_BENCH_ADAPTER_COMMON_H
+#define PFNG_BENCH_ADAPTER_COMMON_H
 
 #include <span>
 #include <vector>
 
 #include "kernel_registry.h"
 
-namespace ime::bench::adapters {
+namespace pfng::bench::adapters {
 
 class CommonState {
   public:
@@ -42,6 +42,22 @@ template <size_t MMultiple, size_t NMultiple, size_t KMultiple> ValidationResult
     return {true, {}};
 }
 
+inline PeakPerformance peak_rvv_i8_i16_mac(const BenchmarkRequest &request) {
+    return {
+        static_cast<double>(request.m) * request.n * request.k,
+        16.0,
+        "i8-i16 MAC",
+    };
+}
+
+inline PeakPerformance peak_ime1_i8_i32_mac(const BenchmarkRequest &request) {
+    return {
+        static_cast<double>(request.m) * request.n * request.k,
+        128.0,
+        "i8-i32 MAC",
+    };
+}
+
 void reset_common(KernelState state);
 ExportResult export_common(KernelState state, std::span<float> output);
 double checksum_common(KernelState state);
@@ -66,9 +82,8 @@ void register_q4_K_rvv_upstream();
 void register_iq2_xxs_rvv_my_br();
 void register_iq2_xxs_rvv_my_ir();
 void register_iq2_xxs_rvv_upstream();
-void register_iq2_xxs_rvv_my_br_tcm();
-void register_iq2_xxs_rvv_my_ir_tcm();
+void register_builtin_kernels();
 
-} // namespace ime::bench::adapters
+} // namespace pfng::bench::adapters
 
 #endif

@@ -7,7 +7,9 @@
 
 #include "adapter_common.h"
 #include "benchmark.h"
+#include "build_manifest.h"
 #include "perf.h"
+#include "platform.h"
 
 namespace {
 
@@ -21,8 +23,8 @@ bool parse_size(const char *text, size_t &value) {
     return true;
 }
 
-bool parse_perf_event(std::string_view text, ime::bench::PerfEventSpec &event) {
-    using namespace ime::bench;
+bool parse_perf_event(std::string_view text, pfng::bench::PerfEventSpec &event) {
+    using namespace pfng::bench;
     const auto cache = [](uint64_t cache_id, uint64_t result) { return cache_id | (PERF_COUNT_HW_CACHE_OP_READ << 8) | (result << 16); };
     if (text == "cycles")
         event = cycles_event();
@@ -60,11 +62,11 @@ bool parse_perf_event(std::string_view text, ime::bench::PerfEventSpec &event) {
     return true;
 }
 
-bool append_perf_events(std::string_view list, std::vector<ime::bench::PerfEventSpec> &events) {
+bool append_perf_events(std::string_view list, std::vector<pfng::bench::PerfEventSpec> &events) {
     while (!list.empty()) {
         const auto comma = list.find(',');
         const auto token = list.substr(0, comma);
-        ime::bench::PerfEventSpec event;
+        pfng::bench::PerfEventSpec event;
         if (token.empty() || !parse_perf_event(token, event))
             return false;
         for (const auto &existing : events)
@@ -79,7 +81,8 @@ bool append_perf_events(std::string_view list, std::vector<ime::bench::PerfEvent
 }
 
 void usage(const char *program) {
-    std::printf("Usage: %s [--list] [--kernel ID|all] --m M --n N --k K "
+    std::printf("Usage: %s [--build-info|--platform-info|--check-platform|--list] "
+                "[--kernel ID|all] --m M --n N --k K "
                 "[--warmup N] [--samples N] [--iterations N] [--threads N] [--no-verify] "
                 "[--perf-events LIST] [--perf-event EVENT]\n"
                 "Events: cycles,instructions,task-clock,page-faults,dtlb-access,dtlb-miss,"
@@ -87,41 +90,61 @@ void usage(const char *program) {
                 program);
 }
 
+void print_build_info() {
+    std::printf("platform: %.*s\n", static_cast<int>(pfng::bench::kBuildTargetPlatform.size()),
+                pfng::bench::kBuildTargetPlatform.data());
+    std::printf("platform display name: %.*s\n",
+                static_cast<int>(pfng::bench::kBuildPlatformDisplayName.size()),
+                pfng::bench::kBuildPlatformDisplayName.data());
+    std::printf("arch: %.*s\n", static_cast<int>(pfng::bench::kBuildTargetArch.size()),
+                pfng::bench::kBuildTargetArch.data());
+    std::printf("tune: %.*s\n", static_cast<int>(pfng::bench::kBuildTargetTune.size()),
+                pfng::bench::kBuildTargetTune.data());
+    std::printf("compiler: %.*s\n", static_cast<int>(pfng::bench::kBuildCompiler.size()),
+                pfng::bench::kBuildCompiler.data());
+    std::printf("compiler version: %.*s\n",
+                static_cast<int>(pfng::bench::kBuildCompilerVersion.size()),
+                pfng::bench::kBuildCompilerVersion.data());
+    std::printf("allowed CPUs: %zu-%zu\n", pfng::bench::kBuildFirstCpu,
+                pfng::bench::kBuildLastCpu);
+    std::printf("maximum threads: %zu\n", pfng::bench::kBuildMaxThreads);
+}
+
+void print_platform_info(const pfng::bench::PlatformDetectionResult &detected) {
+    std::printf("detected platform: %.*s\n",
+                static_cast<int>(pfng::bench::platform_name(detected.platform).size()),
+                pfng::bench::platform_name(detected.platform).data());
+    std::printf("device-tree model: %s\n", detected.model.empty() ? "unavailable" : detected.model.c_str());
+    std::printf("device-tree compatible:\n");
+    for (const auto &compatible : detected.compatibles)
+        std::printf("  %s\n", compatible.c_str());
+    if (!detected.error.empty()) std::printf("detection error: %s\n", detected.error.c_str());
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
-    using namespace ime::bench;
-    adapters::register_q4_0_ime_upstream();
-    adapters::register_q4_0_ime_m4b();
-    adapters::register_q4_0_ime_m4i();
-    adapters::register_q4_0_ime_m4i_cb();
-    adapters::register_q4_0_ime_m8b();
-    adapters::register_q4_0_ime_m8b_cb();
-    adapters::register_q4_0_ime_m8b_dpu();
-    adapters::register_q4_0_ime_m8b_dpu_cb();
-    adapters::register_q4_0_ime_m4n32b();
-    adapters::register_q4_0_ime_m32n4();
-    adapters::register_q4_0_rvv_group();
-    adapters::register_q4_0_rvv_my();
-    adapters::register_q4_0_rvv_upstream();
-    adapters::register_q4_K_rvv_group();
-    adapters::register_q4_K_rvv_my();
-    adapters::register_q4_K_rvv_upstream();
-    adapters::register_iq2_xxs_rvv_my_br();
-    adapters::register_iq2_xxs_rvv_my_ir();
-    adapters::register_iq2_xxs_rvv_upstream();
-    adapters::register_iq2_xxs_rvv_my_br_tcm();
-    adapters::register_iq2_xxs_rvv_my_ir_tcm();
+    using namespace pfng::bench;
+    adapters::register_builtin_kernels();
 
     BenchmarkRequest request;
     request.perf_events.push_back(cycles_event());
     std::string_view selected = "all";
     bool list = false;
+    bool build_info = false;
+    bool platform_info = false;
+    bool check_platform = false;
     bool perf_events_explicit = false;
     for (int i = 1; i < argc; ++i) {
         const std::string_view argument = argv[i];
         if (argument == "--list")
             list = true;
+        else if (argument == "--build-info")
+            build_info = true;
+        else if (argument == "--platform-info")
+            platform_info = true;
+        else if (argument == "--check-platform")
+            check_platform = true;
         else if (argument == "--no-verify")
             request.verify = false;
         else if (argument == "--kernel" && i + 1 < argc)
@@ -132,7 +155,7 @@ int main(int argc, char **argv) {
         } else if (argument == "--warmup" && i + 1 < argc && parse_size(argv[++i], request.warmup_iterations)) {
         } else if (argument == "--samples" && i + 1 < argc && parse_size(argv[++i], request.samples)) {
         } else if (argument == "--iterations" && i + 1 < argc && parse_size(argv[++i], request.iterations)) {
-        } else if (argument == "--threads" && i + 1 < argc && parse_size(argv[++i], request.threads) && request.threads <= 4) {
+        } else if (argument == "--threads" && i + 1 < argc && parse_size(argv[++i], request.threads) && request.threads <= kBuildMaxThreads) {
         } else if ((argument == "--perf-events" || argument == "--perf-event") && i + 1 < argc) {
             if (!perf_events_explicit) {
                 request.perf_events.clear();
@@ -148,9 +171,29 @@ int main(int argc, char **argv) {
             return 2;
         }
     }
+    if (build_info) {
+        print_build_info();
+        return 0;
+    }
+
+    const auto detected_platform = detect_runtime_platform();
+    if (platform_info) print_platform_info(detected_platform);
+    std::string platform_error;
+    if (!verify_runtime_platform(detected_platform, platform_error)) {
+        if (!platform_info) print_platform_info(detected_platform);
+        std::fprintf(stderr, "platform check failed: %s\n", platform_error.c_str());
+        std::fprintf(stderr, "build platform: %.*s\n",
+                     static_cast<int>(kBuildTargetPlatform.size()), kBuildTargetPlatform.data());
+        return 3;
+    }
+    if (platform_info || check_platform) {
+        std::printf("platform check: PASS\n");
+        return 0;
+    }
     if (list) {
         for (const auto &kernel : registered_kernels()) {
-            std::printf("%-24.*s %.*s\n", static_cast<int>(kernel.id.size()), kernel.id.data(), static_cast<int>(kernel.name.size()), kernel.name.data());
+            std::printf("%-24.*s %.*s [platform=%.*s]\n", static_cast<int>(kernel.id.size()), kernel.id.data(), static_cast<int>(kernel.name.size()), kernel.name.data(),
+                        static_cast<int>(platform_name(kernel.platform).size()), platform_name(kernel.platform).data());
         }
         return 0;
     }
@@ -207,7 +250,10 @@ int main(int argc, char **argv) {
             if (reported_cycles) {
                 std::printf("cycles: min=%llu median=%llu iterations=%zu samples=%zu\n", static_cast<unsigned long long>(result.min_cycles), static_cast<unsigned long long>(result.median_cycles),
                             result.iterations, request.samples);
-                std::printf("performance: %.4f FMA/cycle, %.2f%% of 128 FMA/cycle\n", result.fma_per_cycle, result.utilization_percent);
+                std::printf("performance: %.4f %s/cycle, %.2f%% of %.4f %s/cycle\n",
+                            result.operations_per_cycle, result.operation_name.c_str(),
+                            result.utilization_percent, result.peak_operations_per_cycle,
+                            result.operation_name.c_str());
             } else {
                 std::printf("cycles: unavailable iterations=%zu samples=%zu\n", result.iterations, request.samples);
                 std::printf("performance: unavailable (cycles event not requested)\n");

@@ -1,5 +1,5 @@
-#ifndef IME_BENCH_IQ2_XXS_H
-#define IME_BENCH_IQ2_XXS_H
+#ifndef PFNG_BENCH_IQ2_XXS_H
+#define PFNG_BENCH_IQ2_XXS_H
 
 #include <array>
 #include <cstdint>
@@ -7,7 +7,7 @@
 
 #include "ggml.h"
 
-namespace ime::bench::iq2_xxs {
+namespace pfng::bench::iq2_xxs {
 
 // The input generator deliberately uses these 32 distinct entries. The kernels
 // retain the complete llama.cpp table and therefore still support all 256.
@@ -40,6 +40,6 @@ inline void decode_subblock(const uint8_t *packed, int8_t *values, int &scale) {
     scale = 2 * ((signs_and_scale >> 28) & 0x0f) + 1;
 }
 
-} // namespace ime::bench::iq2_xxs
+} // namespace pfng::bench::iq2_xxs
 
 #endif

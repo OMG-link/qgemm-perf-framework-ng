@@ -1,12 +1,12 @@
-#ifndef IME_BENCH_LLAMA_REFERENCE_H
-#define IME_BENCH_LLAMA_REFERENCE_H
+#ifndef PFNG_BENCH_LLAMA_REFERENCE_H
+#define PFNG_BENCH_LLAMA_REFERENCE_H
 
 #include <span>
 #include <vector>
 
 #include "kernel_registry.h"
 
-namespace ime::bench::llama_reference {
+namespace pfng::bench::llama_reference {
 
 void quantize_row_q4_0(const float *input, block_q4_0 *output, size_t count);
 void quantize_row_q8_0(const float *input, block_q8_0 *output, size_t count);
@@ -17,6 +17,6 @@ float dot_q4_K_q8_K(const block_q4_K &weight, const block_q8_K &activation);
 float dot_iq2_xxs_q8_K(const block_iq2_xxs &weight, const block_q8_K &activation);
 std::vector<float> compute(QuantizationType type, const BenchmarkInput &input);
 
-} // namespace ime::bench::llama_reference
+} // namespace pfng::bench::llama_reference
 
 #endif

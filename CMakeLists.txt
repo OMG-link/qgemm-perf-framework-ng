@@ -1,19 +1,46 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(ime_llama LANGUAGES CXX ASM)
+# ---------------------------------------------------------------------------
+# Local cross-compilation setup.
+#
+# CMake needs the target system before project(), so these values cannot be
+# normal project options. They are stable project facts and contain no
+# machine-local paths.
+#
+# The compiler is intentionally NOT pinned here: it is machine-local, so it must
+# come from -DCMAKE_CXX_COMPILER, from the CXX environment variable, or from
+# -DCMAKE_TOOLCHAIN_FILE.
+# ---------------------------------------------------------------------------
+if(NOT CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_SYSTEM_NAME Linux)
+    set(CMAKE_SYSTEM_PROCESSOR riscv64)
+    set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+endif()
+
+if(NOT CMAKE_TOOLCHAIN_FILE
+   AND NOT DEFINED CMAKE_CXX_COMPILER
+   AND NOT DEFINED ENV{CXX})
+    message(FATAL_ERROR
+        "CMAKE_CXX_COMPILER is not configured. Pass "
+        "-DCMAKE_CXX_COMPILER=<RISC-V clang++>, run the wrapper with a "
+        ".pfng-workspace.json entry, or pass -DCMAKE_TOOLCHAIN_FILE=<file>.")
+endif()
+
+project(pfng LANGUAGES CXX ASM)
 
 find_package(OpenMP REQUIRED COMPONENTS CXX)
 
-set(IME_ARCH "rv64gcv_zvfh_zicbop_zba_xsmtvdot" CACHE STRING
-    "RISC-V architecture used by the SpacemiT IME kernels")
-set(IME_TUNE "spacemit-x60" CACHE STRING
-    "RISC-V CPU tuning target")
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(PlatformConfig)
+include(Kernel)
+include(BuildManifest)
+pfng_generate_build_manifest()
 
 add_subdirectory(machine-benchmarks)
 
-set(IME_ALIGNED_NEW_SOURCE
+set(PFNG_ALIGNED_NEW_SOURCE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework/aligned_new.cpp)
-set(IME_MACHINE_BENCHMARK_TARGETS
+set(PFNG_MACHINE_BENCHMARK_TARGETS
     k1-l2-bandwidth
     dynpreunpack-inner-loop
     m8b-inner-issue
@@ -25,59 +52,46 @@ set(IME_MACHINE_BENCHMARK_TARGETS
     dpu-cb-prefetch
     dpu-cb-inner-issue
     m8b-aw-miss
-    k1-memory-latency
-    k1-memory-path-bandwidth)
-foreach(target IN LISTS IME_MACHINE_BENCHMARK_TARGETS)
-    target_sources(${target} PRIVATE ${IME_ALIGNED_NEW_SOURCE})
+    k1-memory-latency)
+foreach(target IN LISTS PFNG_MACHINE_BENCHMARK_TARGETS)
+    if(TARGET ${target})
+        target_sources(${target} PRIVATE ${PFNG_ALIGNED_NEW_SOURCE})
+    endif()
 endforeach()
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-add_library(ime_base_compile_options INTERFACE)
-target_compile_features(ime_base_compile_options INTERFACE cxx_std_20)
-target_compile_definitions(ime_base_compile_options INTERFACE SPACEMIT_X60)
-target_compile_options(ime_base_compile_options INTERFACE
-    -march=${IME_ARCH}
-    -mtune=${IME_TUNE}
-    "SHELL:-mllvm --misched-cluster=false"
+add_library(pfng_base_compile_options INTERFACE)
+target_compile_features(pfng_base_compile_options INTERFACE cxx_std_20)
+target_compile_definitions(pfng_base_compile_options INTERFACE
+    ${PFNG_PLATFORM_COMPILE_DEFINITIONS})
+target_compile_options(pfng_base_compile_options INTERFACE
+    ${PFNG_PLATFORM_KERNEL_COMPILE_OPTIONS}
 )
-target_include_directories(ime_base_compile_options INTERFACE
+target_include_directories(pfng_base_compile_options INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-add_library(ime_compile_options INTERFACE)
-target_link_libraries(ime_compile_options INTERFACE ime_base_compile_options)
-target_compile_options(ime_compile_options INTERFACE
-    "SHELL:-mllvm -riscv-v-vector-bits-min=256"
-    "SHELL:-mllvm -riscv-v-vector-bits-max=256"
-)
-
-set(IME_KERNEL_DEFAULT_COMPILE_OPTIONS
+set(PFNG_KERNEL_DEFAULT_COMPILE_OPTIONS
     -Wall
     -Wextra
-    -mllvm
-    -riscv-v-vector-bits-min=256
-    -mllvm
-    -riscv-v-vector-bits-max=256
+    ${PFNG_PLATFORM_FIXED_VLEN_COMPILE_OPTIONS}
 )
-set(IME_ASSEMBLY_DEFAULT_COMPILE_OPTIONS
+set(PFNG_ASSEMBLY_DEFAULT_COMPILE_OPTIONS
     -O3
-    -mllvm
-    -riscv-v-vector-bits-min=256
-    -mllvm
-    -riscv-v-vector-bits-max=256
+    ${PFNG_PLATFORM_FIXED_VLEN_COMPILE_OPTIONS}
 )
 
-add_library(ime-kernels STATIC)
-target_include_directories(ime-kernels PRIVATE
+add_library(pfng-kernels STATIC)
+target_include_directories(pfng-kernels PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
     ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
     ${CMAKE_CURRENT_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
 )
-target_link_libraries(ime-kernels PRIVATE ime_base_compile_options)
+target_link_libraries(pfng-kernels PRIVATE pfng_base_compile_options)
 
-function(ime_resolve_sources output)
+function(pfng_resolve_sources output)
     set(resolved)
     foreach(source IN LISTS ARGN)
         if(IS_ABSOLUTE "${source}")
@@ -89,7 +103,7 @@ function(ime_resolve_sources output)
     set(${output} "${resolved}" PARENT_SCOPE)
 endfunction()
 
-function(ime_apply_default_options output defaults removals additions)
+function(pfng_apply_default_options output defaults removals additions)
     set(options ${defaults})
     foreach(option IN LISTS removals)
         list(REMOVE_ITEM options "${option}")
@@ -98,33 +112,33 @@ function(ime_apply_default_options output defaults removals additions)
     set(${output} "${options}" PARENT_SCOPE)
 endfunction()
 
-function(ime_add_kernel_sources)
+function(pfng_add_kernel_sources)
     cmake_parse_arguments(ARG "" "" "SOURCES;COMPILE_OPTIONS;REMOVE_COMPILE_OPTIONS;COMPILE_DEFINITIONS" ${ARGN})
     if(NOT ARG_SOURCES)
-        message(FATAL_ERROR "ime_add_kernel_sources requires SOURCES")
+        message(FATAL_ERROR "pfng_add_kernel_sources requires SOURCES")
     endif()
-    ime_resolve_sources(sources ${ARG_SOURCES})
-    ime_apply_default_options(options
-        "${IME_KERNEL_DEFAULT_COMPILE_OPTIONS}"
+    pfng_resolve_sources(sources ${ARG_SOURCES})
+    pfng_apply_default_options(options
+        "${PFNG_KERNEL_DEFAULT_COMPILE_OPTIONS}"
         "${ARG_REMOVE_COMPILE_OPTIONS}"
         "${ARG_COMPILE_OPTIONS}")
-    target_sources(ime-kernels PRIVATE ${sources})
-    set_property(SOURCE ${sources} TARGET_DIRECTORY ime-kernels
+    target_sources(pfng-kernels PRIVATE ${sources})
+    set_property(SOURCE ${sources} TARGET_DIRECTORY pfng-kernels
                  PROPERTY COMPILE_OPTIONS ${options})
     if(ARG_COMPILE_DEFINITIONS)
-        set_property(SOURCE ${sources} TARGET_DIRECTORY ime-kernels
+        set_property(SOURCE ${sources} TARGET_DIRECTORY pfng-kernels
                      PROPERTY COMPILE_DEFINITIONS ${ARG_COMPILE_DEFINITIONS})
     endif()
 endfunction()
 
-function(ime_add_kernel_object target)
+function(pfng_add_kernel_object target)
     cmake_parse_arguments(ARG "" "" "SOURCES;INCLUDE_DIRECTORIES;COMPILE_OPTIONS;REMOVE_COMPILE_OPTIONS;COMPILE_DEFINITIONS" ${ARGN})
     if(NOT ARG_SOURCES)
-        message(FATAL_ERROR "ime_add_kernel_object requires SOURCES")
+        message(FATAL_ERROR "pfng_add_kernel_object requires SOURCES")
     endif()
-    ime_resolve_sources(sources ${ARG_SOURCES})
-    ime_apply_default_options(options
-        "${IME_KERNEL_DEFAULT_COMPILE_OPTIONS}"
+    pfng_resolve_sources(sources ${ARG_SOURCES})
+    pfng_apply_default_options(options
+        "${PFNG_KERNEL_DEFAULT_COMPILE_OPTIONS}"
         "${ARG_REMOVE_COMPILE_OPTIONS}"
         "${ARG_COMPILE_OPTIONS}")
     add_library(${target} OBJECT ${sources})
@@ -134,27 +148,30 @@ function(ime_add_kernel_object target)
         ${CMAKE_SOURCE_DIR}/kernels/common
         ${ARG_INCLUDE_DIRECTORIES}
     )
-    target_link_libraries(${target} PRIVATE ime_base_compile_options)
+    target_link_libraries(${target} PRIVATE pfng_base_compile_options)
     set_property(SOURCE ${sources} TARGET_DIRECTORY ${target}
                  PROPERTY COMPILE_OPTIONS ${options})
     if(ARG_COMPILE_DEFINITIONS)
         target_compile_definitions(${target} PRIVATE ${ARG_COMPILE_DEFINITIONS})
     endif()
-    target_sources(ime-kernels PRIVATE $<TARGET_OBJECTS:${target}>)
+    target_sources(pfng-kernels PRIVATE $<TARGET_OBJECTS:${target}>)
 endfunction()
 
-set(IME_ASM_DIR ${CMAKE_CURRENT_BINARY_DIR}/asm)
-set_property(GLOBAL PROPERTY IME_ASM_TARGETS "")
-function(add_ime_assembly source stem)
+set(PFNG_ASM_DIR ${CMAKE_CURRENT_BINARY_DIR}/asm)
+set_property(GLOBAL PROPERTY PFNG_ASM_TARGETS "")
+function(add_pfng_assembly source stem)
     cmake_parse_arguments(ARG "" "" "DEPENDS;COMPILE_OPTIONS;REMOVE_COMPILE_OPTIONS;COMPILE_DEFINITIONS;INCLUDE_DIRECTORIES" ${ARGN})
-    ime_resolve_sources(sources "${source}")
+    pfng_resolve_sources(sources "${source}")
     list(GET sources 0 source_path)
-    ime_resolve_sources(dependencies ${ARG_DEPENDS})
-    ime_apply_default_options(options
-        "${IME_ASSEMBLY_DEFAULT_COMPILE_OPTIONS}"
+    pfng_resolve_sources(dependencies ${ARG_DEPENDS})
+    pfng_apply_default_options(options
+        "${PFNG_ASSEMBLY_DEFAULT_COMPILE_OPTIONS}"
         "${ARG_REMOVE_COMPILE_OPTIONS}"
         "${ARG_COMPILE_OPTIONS}")
     set(definitions)
+    foreach(definition IN LISTS PFNG_PLATFORM_COMPILE_DEFINITIONS)
+        list(APPEND definitions "-D${definition}")
+    endforeach()
     foreach(definition IN LISTS ARG_COMPILE_DEFINITIONS)
         list(APPEND definitions "-D${definition}")
     endforeach()
@@ -162,16 +179,15 @@ function(add_ime_assembly source stem)
     foreach(directory IN LISTS ARG_INCLUDE_DIRECTORIES)
         list(APPEND include_directories "-I${directory}")
     endforeach()
-    set(output ${IME_ASM_DIR}/${stem}.s)
+    set(output ${PFNG_ASM_DIR}/${stem}.s)
     add_custom_command(
         OUTPUT ${output}
-        COMMAND ${CMAKE_COMMAND} -E make_directory ${IME_ASM_DIR}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${PFNG_ASM_DIR}
         COMMAND ${CMAKE_CXX_COMPILER}
             -std=c++20
-            -DSPACEMIT_X60
             ${definitions}
-            -march=${IME_ARCH}
-            -mtune=${IME_TUNE}
+            -march=${PFNG_PLATFORM_ARCH}
+            -mtune=${PFNG_PLATFORM_TUNE}
             -mllvm --misched-cluster=false
             ${options}
             -I${CMAKE_SOURCE_DIR}/include
@@ -180,6 +196,7 @@ function(add_ime_assembly source stem)
             -I${CMAKE_SOURCE_DIR}/bench/llama_reference
             -I${CMAKE_SOURCE_DIR}/kernels/common
             -I${CMAKE_SOURCE_DIR}/kernels/iq2_xxs-q8_K-RVV-common
+            -I${CMAKE_BINARY_DIR}/generated
             ${include_directories}
             -S ${source_path}
             -o ${output}
@@ -191,61 +208,52 @@ function(add_ime_assembly source stem)
             ${CMAKE_SOURCE_DIR}/kernels/common/ime1_dispatch.h
             ${CMAKE_SOURCE_DIR}/kernels/common/rvv_vl.h
             ${CMAKE_SOURCE_DIR}/bench/perf.h
-            ${CMAKE_SOURCE_DIR}/bench/timer.hpp
         VERBATIM
         COMMENT "Generating ${output}"
     )
-    set(assembly_target ime_asm_${stem})
+    set(assembly_target pfng_asm_${stem})
     add_custom_target(${assembly_target} DEPENDS ${output})
-    set_property(GLOBAL APPEND PROPERTY IME_ASM_TARGETS ${assembly_target})
+    set_property(GLOBAL APPEND PROPERTY PFNG_ASM_TARGETS ${assembly_target})
 endfunction()
-
-option(IME_ENABLE_TCM "Build IQ2_XXS kernels that use the fine_mm TCM allocator" ON)
-set(IME_TCM_RUNTIME "" CACHE FILEPATH
-    "Library providing fine_mm_*; required to enable IQ2_XXS TCM kernels")
-set(IME_TCM_RUNTIME_CANDIDATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/../tcm/libfine_tcm_mm.a")
-if(IME_ENABLE_TCM AND NOT IME_TCM_RUNTIME AND EXISTS "${IME_TCM_RUNTIME_CANDIDATE}")
-    set(IME_TCM_RUNTIME "${IME_TCM_RUNTIME_CANDIDATE}")
-endif()
-if(IME_ENABLE_TCM AND IME_TCM_RUNTIME)
-    if(NOT EXISTS "${IME_TCM_RUNTIME}")
-        message(FATAL_ERROR "IME_TCM_RUNTIME does not exist: ${IME_TCM_RUNTIME}")
-    endif()
-    set(IME_HAVE_TCM ON)
-else()
-    set(IME_HAVE_TCM OFF)
-endif()
 
 add_subdirectory(kernels)
 
-if(IME_HAVE_TCM)
-    target_compile_definitions(ime-kernels PRIVATE IME_HAVE_TCM)
-    target_link_libraries(ime-kernels PUBLIC "${IME_TCM_RUNTIME}")
-    message(STATUS "IQ2_XXS TCM kernels enabled with ${IME_TCM_RUNTIME}")
-elseif(IME_ENABLE_TCM)
-    message(STATUS "IQ2_XXS TCM kernels disabled: set IME_TCM_RUNTIME to the fine_mm runtime library")
-else()
-    message(STATUS "IQ2_XXS TCM kernels disabled by IME_ENABLE_TCM=OFF")
-endif()
+set(PFNG_BUILTIN_KERNELS_SOURCE
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/builtin_kernels.cpp")
+pfng_generate_builtin_kernels("${PFNG_BUILTIN_KERNELS_SOURCE}")
 
-add_executable(ime-llama-bench
+add_executable(pfng-bench
     bench/main.cpp
     bench/framework/aligned_new.cpp
     bench/framework/kernel_registry.cpp
     bench/framework/benchmark.cpp
+    bench/framework/platform.cpp
     bench/llama_reference/llama_reference.cpp
+    ${PFNG_BUILTIN_KERNELS_SOURCE}
 )
-target_include_directories(ime-llama-bench PRIVATE
+target_include_directories(pfng-bench PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/bench
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
     ${CMAKE_CURRENT_SOURCE_DIR}/bench/llama_reference
     ${CMAKE_CURRENT_SOURCE_DIR}/kernels/common
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
-target_link_libraries(ime-llama-bench PRIVATE ime_compile_options ime-kernels OpenMP::OpenMP_CXX)
-target_compile_options(ime-llama-bench PRIVATE -Wall -Wextra)
+target_compile_features(pfng-bench PRIVATE cxx_std_20)
+target_link_libraries(pfng-bench PRIVATE pfng-kernels OpenMP::OpenMP_CXX)
+target_compile_options(pfng-bench PRIVATE -Wall -Wextra)
+target_link_options(pfng-bench PRIVATE -fopenmp=libomp)
 
-add_ime_assembly(bench/main.cpp main)
-get_property(IME_ASM_TARGETS GLOBAL PROPERTY IME_ASM_TARGETS)
+add_pfng_assembly(bench/main.cpp main)
+get_property(PFNG_ASM_TARGETS GLOBAL PROPERTY PFNG_ASM_TARGETS)
 add_custom_target(assembly)
-add_dependencies(assembly ${IME_ASM_TARGETS})
+add_dependencies(assembly ${PFNG_ASM_TARGETS})
+
+add_executable(pfng-platform-test
+    tests/platform_test.cpp
+    bench/framework/platform.cpp)
+target_compile_features(pfng-platform-test PRIVATE cxx_std_20)
+target_include_directories(pfng-platform-test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/bench/framework
+    ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_compile_options(pfng-platform-test PRIVATE -Wall -Wextra)
