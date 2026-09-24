@@ -12,6 +12,8 @@
 | `k3_insn_throughput` | 标准 RVV 与 XSMTVDotII 指令的稳态吞吐 |
 | `k3_madot_rate` | `smt.vmadot` 的依赖延迟与所需独立累加器数量 |
 | `k3_madot_shape` | 单条 dot 指令的输出形状与 MAC 数量 |
+| `k3_madot_layout` | `smt.vmadot i8` 三个操作数的元素排布（one-hot 逐位确定 + 随机矩阵对照） |
+| `k3_tcm_probe` | TCM 作为微核中间缓冲的确认：写后读回一致性 + 写/读带宽对照 |
 | `k3_scaling` | 标量/向量/矩阵单元的多核扩展性 |
 | `k3_path_bandwidth` | L1D→寄存器 / L2→L1D / 主存→L2 的分层带宽（斜率法 + 大页） |
 | `k3_l1d_peak` | L1D→寄存器峰值的定向验证（零地址运算 + LMUL 扫描） |
