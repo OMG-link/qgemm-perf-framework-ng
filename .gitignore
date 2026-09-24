@@ -1,3 +1,4 @@
 /build/
+/machine-benchmarks/spacemit-k3-a100/out/
 /.cache/
 /.pfng-workspace.json
