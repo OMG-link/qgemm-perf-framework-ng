@@ -57,6 +57,16 @@ inline PeakPerformance peak_ime1_i8_i32_mac(const BenchmarkRequest &request) {
         "i8-i32 MAC",
     };
 }
+// XSMTVDotII on the K3 / A100: one smt.vmadot i8 per cycle, 8 x 16 x 8 = 1024
+// MAC per instruction. A matrix unit is shared by an even/odd hart pair, so
+// eight threads cannot reach eight times this rate.
+inline PeakPerformance peak_ime2_i8_i32_mac(const BenchmarkRequest &request) {
+    return {
+        static_cast<double>(request.m) * request.n * request.k,
+        1024.0,
+        "i8-i32 MAC",
+    };
+}
 
 void reset_common(KernelState state);
 ExportResult export_common(KernelState state, std::span<float> output);
