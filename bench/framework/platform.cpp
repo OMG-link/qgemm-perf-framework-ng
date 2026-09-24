@@ -40,6 +40,8 @@ std::string_view platform_name(PlatformId platform) noexcept {
     switch (platform) {
     case PlatformId::SpacemitK1A60: return "spacemit-k1-a60";
     case PlatformId::SpacemitK1X60: return "spacemit-k1-x60";
+    case PlatformId::SpacemitK3A100:
+        return "spacemit-k3-a100";
     case PlatformId::Unknown: return "unknown";
     }
     return "unknown";
@@ -48,6 +50,8 @@ std::string_view platform_name(PlatformId platform) noexcept {
 PlatformId platform_from_name(std::string_view name) noexcept {
     if (name == "spacemit-k1-a60") return PlatformId::SpacemitK1A60;
     if (name == "spacemit-k1-x60") return PlatformId::SpacemitK1X60;
+    if (name == "spacemit-k3-a100")
+        return PlatformId::SpacemitK3A100;
     return PlatformId::Unknown;
 }
 

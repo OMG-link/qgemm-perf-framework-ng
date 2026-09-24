@@ -12,6 +12,7 @@ enum class PlatformId {
     Unknown,
     SpacemitK1A60,
     SpacemitK1X60,
+    SpacemitK3A100,
 };
 
 struct PlatformDetectionResult {

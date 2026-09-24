@@ -22,6 +22,7 @@ function(pfng_generate_build_manifest)
   \"compiler\": \"${CMAKE_CXX_COMPILER}\",
   \"compiler_id\": \"${CMAKE_CXX_COMPILER_ID}\",
   \"compiler_version\": \"${CMAKE_CXX_COMPILER_VERSION}\",
+  \"remote_prologue\": \"${PFNG_PLATFORM_REMOTE_PROLOGUE}\",
   \"tcm_enabled\": false
 }
 ")

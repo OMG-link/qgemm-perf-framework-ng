@@ -16,7 +16,7 @@ Usage:
 
 The compiler comes from --cxx or .pfng-workspace.json; the repository contains
 no compiler path. The platform and remote have no defaults.
-Currently supported platforms: spacemit-k1-a60, spacemit-k1-x60.
+Currently supported platforms: spacemit-k1-a60, spacemit-k1-x60, spacemit-k3-a100.
 EOF
 }
 
@@ -65,7 +65,8 @@ while (($#)); do
 done
 
 [[ -n ${platform} ]] || die "--platform is required"
-[[ ${platform} == spacemit-k1-a60 || ${platform} == spacemit-k1-x60 ]] ||
+[[ ${platform} == spacemit-k1-a60 || ${platform} == spacemit-k1-x60 ||
+   ${platform} == spacemit-k3-a100 ]] ||
     die "unsupported platform: ${platform}"
 build_dir=${build_dir:-${SCRIPT_DIR}/build/${platform}}
 binary=${build_dir}/pfng-bench
@@ -134,11 +135,18 @@ run_remote() {
     [[ -n ${remote} ]] || die "--remote is required"
     check_manifest
     local remote_dir remote_command threads=1 cpus index first_cpu last_cpu max_threads
+    local prologue
     read -r first_cpu last_cpu max_threads < <(python3 - "${build_dir}/build-manifest.json" <<'PY'
 import json
 import sys
 manifest = json.load(open(sys.argv[1]))
 print(manifest["first_cpu"], manifest["last_cpu"], manifest["max_threads"])
+PY
+)
+    prologue=$(python3 - "${build_dir}/build-manifest.json" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1])).get("remote_prologue", ""))
 PY
 )
     for ((index = 0; index < ${#benchmark_arguments[@]}; ++index)); do
@@ -162,6 +170,9 @@ PY
     for argument in "${benchmark_arguments[@]}"; do
         printf -v remote_command '%s %q' "${remote_command}" "${argument}"
     done
+    # Platforms whose CPUs sit outside the default affinity mask need a command
+    # in the same shell before taskset can reach them.
+    [[ -n ${prologue} ]] && remote_command="${prologue}; ${remote_command}"
     ssh -o BatchMode=yes "${remote}" "${remote_command}"
 }
 

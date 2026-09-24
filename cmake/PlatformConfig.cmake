@@ -1,6 +1,7 @@
 if(NOT DEFINED PFNG_TARGET_PLATFORM OR PFNG_TARGET_PLATFORM STREQUAL "")
     message(FATAL_ERROR
-        "PFNG_TARGET_PLATFORM is required (supported: spacemit-k1-a60, spacemit-k1-x60)")
+        "PFNG_TARGET_PLATFORM is required "
+        "(supported: spacemit-k1-a60, spacemit-k1-x60, spacemit-k3-a100)")
 endif()
 
 set(_pfng_platform_file
@@ -32,6 +33,12 @@ if(NOT PFNG_PLATFORM_ID STREQUAL PFNG_TARGET_PLATFORM)
     message(FATAL_ERROR
         "Platform profile '${_pfng_platform_file}' declares '${PFNG_PLATFORM_ID}', "
         "expected '${PFNG_TARGET_PLATFORM}'")
+endif()
+
+# Optional: a shell command the deployment wrapper must run before pinning
+# threads. Platforms whose CPUs are outside the default affinity mask need it.
+if(NOT DEFINED PFNG_PLATFORM_REMOTE_PROLOGUE)
+    set(PFNG_PLATFORM_REMOTE_PROLOGUE "")
 endif()
 
 if(DEFINED PFNG_CONFIGURED_PLATFORM AND
