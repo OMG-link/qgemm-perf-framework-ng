@@ -78,6 +78,7 @@ void register_q4_0_ime_m4b();
 void register_q4_0_ime_m4i();
 void register_q4_0_ime_m4i_cb();
 void register_q4_0_ime_m8b();
+void register_q4_0_ime_rr();
 void register_q4_0_ime_m8b_cb();
 void register_q4_0_ime_m8b_dpu();
 void register_q4_0_ime_m8b_dpu_cb();
