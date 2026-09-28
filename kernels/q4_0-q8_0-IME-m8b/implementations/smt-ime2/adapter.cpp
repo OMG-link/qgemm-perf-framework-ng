@@ -122,10 +122,12 @@ void run(KernelState opaque, size_t iterations) noexcept {
         for (size_t tile_m = 0; tile_m < state.m(); tile_m += kMr) {
             // The batched int32 component buffer. TCM takes whole-register
             // stores about 2.9x faster than L1D-resident ordinary memory, but a
-            // TCM block is private to a hart pair, so a thread that is not on
-            // one of the owning cpus falls back to the stack.
+            // The process-wide allocator assigns each A100 CPU its own 384 KiB
+            // TCM block. Fall back to the stack if that block is exhausted or
+            // TCM initialisation failed.
             alignas(256) int32_t fallback_components[kIme2ReductionComponentCount];
-            int32_t *components = tcm::scratch(sizeof(fallback_components));
+            int32_t *components = static_cast<int32_t *>(tcm::allocate(sizeof(fallback_components), alignof(decltype(fallback_components))));
+            const bool components_in_tcm = components != nullptr;
             if (components == nullptr) {
                 components = fallback_components;
             }
@@ -145,6 +147,9 @@ void run(KernelState opaque, size_t iterations) noexcept {
                 for (size_t row = 0; row < kMr; ++row) {
                     std::copy_n(acc + row * kNr, kNr, output_rows + tile_n + row * state.n());
                 }
+            }
+            if (components_in_tcm) {
+                tcm::deallocate(components);
             }
         }
     }

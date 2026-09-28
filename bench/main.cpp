@@ -10,6 +10,7 @@
 #include "build_manifest.h"
 #include "perf.h"
 #include "platform.h"
+#include "tcm_arena.h"
 
 namespace {
 
@@ -201,6 +202,7 @@ int main(int argc, char **argv) {
         usage(argv[0]);
         return 2;
     }
+    tcm::initialize();
     std::vector<const KernelRegistration *> kernels;
     if (selected == "all") {
         for (const auto &kernel : registered_kernels())

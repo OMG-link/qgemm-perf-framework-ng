@@ -75,6 +75,9 @@ layout headers and A60 adapter support through `iq2_xxs-q8_K-RVV-common`.
 
 ## TCM
 
-TCM-backed IQ2 variants are not part of the current build or registry. Dormant
-source guarded by `USE_TCM` is retained for a later dedicated compatibility
-design, but no active target defines that macro or links `fine_mm_*`.
+`kernels/common/tcm_arena.{h,cpp}` provides the shared process-wide TCM
+allocator. It maps the complete platform TCM once before benchmark input
+creation, then performs aligned secondary allocations. A60 CPUs 0-3 share one
+512 KiB arena; A100 CPUs 8-15 each use their corresponding 384 KiB block within
+the 3 MiB mapping; X60 uses a no-op backend. TCM-backed IQ2 variants are still
+not part of the active registry.

@@ -165,6 +165,8 @@ cache-blocked kernels therefore remain under
 
 ## TCM status
 
-TCM-backed IQ2 variants and the TCM memory-path machine benchmark are excluded
-from the active build while their cross-platform model is reconsidered. The
-current executable neither registers TCM kernels nor links a TCM allocator.
+The executable includes a shared, platform-aware TCM allocator. At benchmark
+startup it maps the complete TCM once (512 KiB on A60, 3 MiB on A100) and then
+serves aligned allocations from CPU-appropriate secondary arenas. X60 has no
+TCM and uses a no-op backend. TCM-backed IQ2 variants remain excluded from the
+active registry.

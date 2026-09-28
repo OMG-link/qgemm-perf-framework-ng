@@ -24,9 +24,6 @@ if(PFNG_CURRENT_KERNEL_ENABLED)
     )
     pfng_add_kernel_sources(SOURCES ${PFNG_M8B_IMPLEMENTATION}/adapter.cpp
         COMPILE_OPTIONS -fopenmp)
-    if(PFNG_TARGET_PLATFORM STREQUAL "spacemit-k3-a100")
-        pfng_add_kernel_sources(SOURCES ${PFNG_M8B_IMPLEMENTATION}/tcm_arena.cpp)
-    endif()
     add_pfng_assembly(${PFNG_M8B_IMPLEMENTATION}/kernel.cpp ${PFNG_M8B_ASSEMBLY_STEM}
         DEPENDS ${PFNG_M8B_IMPLEMENTATION}/kernel.h)
 endif()
