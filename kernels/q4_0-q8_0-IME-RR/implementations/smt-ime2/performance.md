@@ -60,3 +60,25 @@ Binary SHA-256:         2495de06e0182ef3b2c99b8bf16b0a93c4283ac6c3af469596f0fea3
 | Llama 2 7B | intermediate → hidden | 480 | 4,096 | 11,008 | 3 | 152,373,676 | 4.62% | 2.97x |
 | Llama 2 7B | intermediate → hidden | 480 | 4,096 | 11,008 | 4 | 113,691,402 | 4.65% | 3.98x |
 | Llama 2 7B | intermediate → hidden | 480 | 4,096 | 11,008 | 8 | 57,104,192 | 4.63% | 7.92x |
+
+## Inner-loop region cost
+
+No-instrumentation `perf` PC sampling on the same board (`cpu-clock:u` distribution
+scaled by an external `perf stat -e cycles:u` total) attributes the register-tile
+inner loop of `q4_0_q8_0_ime_rr_w_stationary` at `M=480, N=1536, K=1536`, one
+thread, as follows. One iteration is one execution of the `L74-L121` loop body.
+
+| Source region | Cycles per iteration |
+|---|---:|
+| `L76-96` activation loads + int8 `smt.vmadot` | 45.25 |
+| `L98-106` fp32 clear + fp16 `smt.vfwmadot` | 26.37 |
+| `L108-119` four `REDUCE_GROUP` C reduce groups | 79.71 |
+| `L74/L80` loop tail (supplementary) | 6.97 |
+| whole kernel function | 161.87 |
+
+`L108-119` is C-traffic bound: its four `vfmacc.vv` read-modify-write instructions
+alone hold ~33% of the kernel's samples. `L76-96` is activation-load-latency bound;
+the scalar instruction after the first `vl1r.v` is the skid target of that load
+miss. Full method, address map, evidence and caveats are in
+[2026-09-29-rr-per-region-cycles.md](../../../docs/2026-09-29-rr-per-region-cycles.md).
+

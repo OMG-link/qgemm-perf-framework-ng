@@ -25,7 +25,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[2]
-SUPPORTED_PLATFORMS = ("spacemit-k1-a60", "spacemit-k1-x60")
+SUPPORTED_PLATFORMS = ("spacemit-k1-a60", "spacemit-k1-x60", "spacemit-k3-a100")
 DEFAULT_REGIONS = ROOT / "tools" / "pfng_perf" / "perf-regions.json"
 
 
@@ -185,6 +185,8 @@ def make_remote_script(
     cpu: int,
     binary_args: list[str],
     call_graph: str,
+    prologue: str = "",
+    cycles_event: str = "",
 ) -> str:
     q = shlex.quote
     record_options = ["perf", "record", "-q", "-e", event, "-c", str(period)]
@@ -199,6 +201,26 @@ def make_remote_script(
     ]
     record_options += binary_args
     record_command = " ".join(q(item) for item in record_options)
+    # An independent external counter pass over the exact same invocation gives
+    # the total hardware cycles the process consumed.  The benchmark binary
+    # keeps its own internal `cycles` counter for its reported metric; the two
+    # counters coexist on the platforms tested so far.  This total is what turns
+    # a per-region PC-sample share into a per-region cycle count.
+    stat_command = ""
+    if cycles_event and cycles_event != "none":
+        stat_options = ["perf", "stat", "-e", cycles_event, "--", "setarch", "-R",
+                        "taskset", "-c", str(cpu), f"{remote_dir}/pfng-bench"]
+        stat_options += binary_args
+        stat_command = " ".join(q(item) for item in stat_options)
+    # Auxiliary commands are plain text so that they can be spliced into the
+    # generated shell script below.
+    prologue_block = f"{prologue}\n" if prologue else ""
+    stat_block = ""
+    if stat_command:
+        stat_block = (
+            f"{stat_command} >\"$remote_dir/stat.stdout\" 2>\"$remote_dir/stat.stderr\"\n"
+            "printf '%s\\n' \"$?\" >\"$remote_dir/stat.exitcode\"\n"
+        )
     report_command = (
         f"perf report --stdio -i {q(remote_dir + '/perf.data')} "
         "--sort symbol,dso --percent-limit 0 --stdio-color never "
@@ -235,9 +257,9 @@ remote_dir={q(remote_dir)}
     echo 'cpu_model:'
     grep -m1 -E '^(model name|uarch|cpudesc)' /proc/cpuinfo 2>&1 || true
 }} >"$remote_dir/environment.txt" 2>&1
-sha256sum "$remote_dir/pfng-bench" >"$remote_dir/remote-binary.sha256" 2>&1 || true
+{prologue_block}sha256sum "$remote_dir/pfng-bench" >"$remote_dir/remote-binary.sha256" 2>&1 || true
 set +e
-{record_command} >"$remote_dir/benchmark.stdout" 2>"$remote_dir/benchmark.stderr"
+{stat_block}{record_command} >"$remote_dir/benchmark.stdout" 2>"$remote_dir/benchmark.stderr"
 record_rc=$?
 printf '%s\\n' "$record_rc" >"$remote_dir/record.exitcode"
 if test -s "$remote_dir/perf.data"; then
@@ -256,6 +278,9 @@ def copy_remote_artifacts(host: str, remote_dir: str, destination: Path) -> None
         "benchmark.stdout",
         "benchmark.stderr",
         "record.exitcode",
+        "stat.stdout",
+        "stat.stderr",
+        "stat.exitcode",
         "perf-report.txt",
         "perf-report.stderr",
         "perf-annotate.txt",
@@ -290,6 +315,7 @@ def make_manifest(args: argparse.Namespace, binary: Path, root: Path) -> dict[st
         "cpu": args.cpu,
         "event": args.event,
         "period": args.period,
+        "cycles_event": args.cycles_event,
         "repetitions": args.repetitions,
         "call_graph": args.call_graph,
         "binary": str(binary),
@@ -299,7 +325,13 @@ def make_manifest(args: argparse.Namespace, binary: Path, root: Path) -> dict[st
     }
 
 
-def profile_once(args: argparse.Namespace, binary: Path, run_dir: Path, repetition: int) -> int:
+def profile_once(
+    args: argparse.Namespace,
+    binary: Path,
+    run_dir: Path,
+    repetition: int,
+    prologue: str = "",
+) -> int:
     run_dir.mkdir(parents=True, exist_ok=True)
     remote_dir = remote_output(args.remote, "mktemp -d /tmp/pfng-perf.XXXXXX")
     if not remote_dir:
@@ -322,6 +354,8 @@ def profile_once(args: argparse.Namespace, binary: Path, run_dir: Path, repetiti
             args.cpu,
             benchmark_args(args),
             args.call_graph,
+            prologue,
+            args.cycles_event,
         )
         (run_dir / "remote-command.sh").write_text(command)
         result = run_ssh(args.remote, command, check=False)
@@ -353,6 +387,29 @@ def parse_symbol_report(path: Path) -> list[dict[str, Any]]:
                 "symbol": symbol,
             })
     return rows
+
+
+STAT_EVENT_RE_TEMPLATE = r"^\s*(?P<value>[0-9][0-9,]*)(?:\s|\.)*\s+{event}\s*$"
+
+
+def parse_stat_event(path: Path, event: str) -> int | None:
+    """Return the raw counter value for `event` from a `perf stat` stderr dump.
+
+    `perf stat` prints one ``<count>  <event>`` row per counted event.  Rows
+    that became invalid (``<not counted>``, ``<not supported>``) never match the
+    numeric pattern, so ``None`` unambiguously means "no usable counter".
+    """
+    if not path.exists():
+        return None
+    pattern = re.compile(STAT_EVENT_RE_TEMPLATE.format(event=re.escape(event)))
+    for line in path.read_text(errors="replace").splitlines():
+        match = pattern.match(line)
+        if match:
+            value = match.group("value")
+            if value.endswith(","):
+                continue
+            return int(value.replace(",", ""))
+    return None
 
 
 ANNOTATE_SECTION_RE = re.compile(
@@ -455,8 +512,17 @@ def parse_annotate_regions(
     return values, diagnostics
 
 
+def symbol_percent(symbols: list[dict[str, Any]], dso: str, symbol: str) -> float | None:
+    for row in symbols:
+        if row["dso"] == dso and row["symbol"] == symbol:
+            return float(row["percent"])
+    return None
+
+
 def summarize_runs(root: Path, manifest: dict[str, Any], regions_file: Path) -> dict[str, Any]:
     regions = load_regions(regions_file, manifest["kernel"])
+    cycles_event = str(manifest.get("cycles_event") or "")
+    counter_active = bool(cycles_event) and cycles_event != "none"
     run_dirs = sorted(path for path in root.glob("run-*") if path.is_dir())
     runs: list[dict[str, Any]] = []
     warnings: list[str] = []
@@ -464,10 +530,31 @@ def summarize_runs(root: Path, manifest: dict[str, Any], regions_file: Path) -> 
         region_values, diagnostics = parse_annotate_regions(run_dir / "perf-annotate.txt", regions)
         symbols = parse_symbol_report(run_dir / "perf-report.txt")
         exitcode = (run_dir / "record.exitcode").read_text().strip() if (run_dir / "record.exitcode").exists() else "unknown"
+        total_cycles = parse_stat_event(run_dir / "stat.stderr", cycles_event) if counter_active else None
+        # Turn the local (per-symbol) annotate percentages into absolute cycles:
+        # cycles(region) = total_cycles * symbol_share * region_share.
+        region_cycles: dict[str, float] = {}
+        for region in regions:
+            name = str(region["name"])
+            if total_cycles is None:
+                continue
+            share = symbol_percent(symbols, str(region["dso"]), str(region["symbol"]))
+            if share is None:
+                diagnostics.append(
+                    f"region {name!r}: symbol {region['symbol']!r} not present in perf-report top symbols"
+                )
+                continue
+            region_cycles[name] = total_cycles * (share / 100.0) * (region_values[name] / 100.0)
+        if counter_active and total_cycles is None:
+            diagnostics.append(
+                f"no usable {cycles_event!r} counter in stat.stderr; region cycles unavailable"
+            )
         runs.append({
             "run": run_dir.name,
             "record_exitcode": exitcode,
+            "total_cycles": total_cycles,
             "regions_percent": region_values,
+            "regions_cycles": region_cycles,
             "parser_diagnostics": diagnostics,
             "top_symbols": symbols[:20],
         })
@@ -476,6 +563,7 @@ def summarize_runs(root: Path, manifest: dict[str, Any], regions_file: Path) -> 
     for region in regions:
         name = str(region["name"])
         samples = [run["regions_percent"][name] for run in runs if name in run["regions_percent"]]
+        cycles = [run["regions_cycles"][name] for run in runs if name in run["regions_cycles"]]
         region_summary[name] = {
             "dso": region["dso"],
             "symbol": region["symbol"],
@@ -485,7 +573,11 @@ def summarize_runs(root: Path, manifest: dict[str, Any], regions_file: Path) -> 
             "runs_percent": samples,
             "mean_percent": statistics.mean(samples) if samples else None,
             "stdev_percent": statistics.stdev(samples) if len(samples) > 1 else 0.0 if samples else None,
+            "runs_cycles": cycles,
+            "mean_cycles": statistics.mean(cycles) if cycles else None,
+            "stdev_cycles": statistics.stdev(cycles) if len(cycles) > 1 else 0.0 if cycles else None,
         }
+
     if not regions:
         warnings.append(f"no configured address regions for {manifest['kernel']}")
     return {
@@ -499,6 +591,7 @@ def summarize_runs(root: Path, manifest: dict[str, Any], regions_file: Path) -> 
 
 def write_summary(root: Path, manifest: dict[str, Any], summary: dict[str, Any]) -> None:
     (root / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+    has_cycles = any(value["mean_cycles"] is not None for value in summary["regions"].values())
     lines = [
         f"# perf PC profile: `{manifest['kernel']}`",
         "",
@@ -511,19 +604,35 @@ def write_summary(root: Path, manifest: dict[str, Any], summary: dict[str, Any])
         "",
         "## Configured regions",
         "",
-        "| Region | DSO | Symbol | Address range | Mean sample share | Stddev |",
-        "|---|---|---|---:|---:|---:|",
     ]
+    if has_cycles:
+        lines += [
+            f"`Mean region cycles` = external `{manifest.get('cycles_event', '')}` total x kernel symbol share x local sample share.",
+            "",
+            "| Region | DSO | Symbol | Address range | Mean sample share | Stddev | Mean region cycles | Stddev |",
+            "|---|---|---|---:|---:|---:|---:|---:|",
+        ]
+    else:
+        lines += [
+            "| Region | DSO | Symbol | Address range | Mean sample share | Stddev |",
+            "|---|---|---|---:|---:|---:|",
+        ]
     for name, value in summary["regions"].items():
         mean = "n/a" if value["mean_percent"] is None else f"{value['mean_percent']:.2f}%"
         stdev = "n/a" if value["stdev_percent"] is None else f"{value['stdev_percent']:.2f} pp"
-        lines.append(
+        row = (
             f"| `{name}` | `{value['dso']}` | `{value['symbol']}` | "
             f"`{value['start']}..{value['end']}` | {mean} | {stdev} |"
         )
-    lines += ["", "## Run status", "", "| Run | perf exit code |", "|---|---:|"]
+        if has_cycles:
+            cycles = "n/a" if value["mean_cycles"] is None else f"{value['mean_cycles']:.0f}"
+            cycles_stdev = "n/a" if value["stdev_cycles"] is None else f"{value['stdev_cycles']:.0f}"
+            row += f" {cycles} | {cycles_stdev} |"
+        lines.append(row)
+    lines += ["", "## Run status", "", "| Run | perf exit code | Total process cycles |", "|---|---:|---:|"]
     for run in summary["runs"]:
-        lines.append(f"| `{run['run']}` | `{run['record_exitcode']}` |")
+        total = "n/a" if run.get("total_cycles") is None else str(run["total_cycles"])
+        lines.append(f"| `{run['run']}` | `{run['record_exitcode']}` | `{total}` |")
     if summary["warnings"]:
         lines += ["", "## Warnings", ""] + [f"- {warning}" for warning in summary["warnings"]]
     (root / "summary.md").write_text("\n".join(lines) + "\n")
@@ -608,9 +717,10 @@ def command_profile(args: argparse.Namespace) -> int:
     (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (output / "command.txt").write_text(" ".join(shlex.quote(item) for item in sys.argv) + "\n")
     exitcodes = []
+    prologue = str(build_manifest.get("remote_prologue", ""))
     for repetition in range(1, args.repetitions + 1):
         run_dir = output / f"run-{repetition:02d}"
-        exitcodes.append(profile_once(args, binary, run_dir, repetition))
+        exitcodes.append(profile_once(args, binary, run_dir, repetition, prologue))
     summary = summarize_runs(output, manifest, args.regions_file)
     write_summary(output, manifest, summary)
     print(f"artifact: {output}")
@@ -667,6 +777,12 @@ def build_parser() -> argparse.ArgumentParser:
     profile.add_argument("--repetitions", type=positive, default=3)
     profile.add_argument("--event", default="cpu-clock:u")
     profile.add_argument("--period", type=positive, default=10000)
+    profile.add_argument(
+        "--cycles-event",
+        default="cycles:u",
+        help="external perf stat event that provides the total process cycles; "
+             "use 'none' to skip the counter pass",
+    )
     profile.add_argument("--call-graph", choices=("none", "fp", "dwarf"), default="none")
     profile.add_argument("--verify", action="store_true", help="include benchmark correctness verification")
     profile.add_argument("--build", action="store_true", help="build with compile-and-test.sh before profiling")
