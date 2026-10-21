@@ -10,7 +10,8 @@ M = 480, N = 1536, K = 1536
 ```
 
 The goal is to identify the distribution of execution time inside the three
-source regions of `kernels/q4_0-q8_0-IME-m8b/kernel.cpp` without inserting
+source regions of
+`kernels/q4_0-q8_0-IME-m8b/implementations/smt-ime1/kernel.cpp` without inserting
 `rdcycle`, logging, or other measurement code into the kernel.
 
 ## Platform and build
@@ -33,7 +34,7 @@ so the binary and `perf.data` remain matched.
 
 ## Method
 
-The reusable driver is `tools/ime_perf/ime_perf.py`. It performs the following steps:
+The reusable driver is `tools/pfng_perf/pfng_perf.py`. It performs the following steps:
 
 1. Runs a remote preflight and records kernel, perf, permission, CPU, and
    cpufreq information.
@@ -49,7 +50,7 @@ The reusable driver is `tools/ime_perf/ime_perf.py`. It performs the following s
 The benchmark command used by the driver was equivalent to:
 
 ```bash
-build/ime-llama-bench \
+build/spacemit-k1-a60/pfng-bench \
   --kernel q4_0-q8_0-IME-m8b \
   --m 480 --n 1536 --k 1536 \
   --warmup 2 --samples 1 --iterations 20 --no-verify
@@ -100,14 +101,14 @@ operations:
 Check the target without modifying the kernel:
 
 ```bash
-python3 tools/ime_perf/ime_perf.py preflight --remote spacemit-k1 --cpu 0
+python3 tools/pfng_perf/pfng_perf.py preflight --remote spacemit-k1 --platform spacemit-k1-a60 --cpu 0
 ```
 
 Run three profiles and create a local artifact directory:
 
 ```bash
-python3 tools/ime_perf/ime_perf.py profile \
-  --remote spacemit-k1 --cpu 0 \
+python3 tools/pfng_perf/pfng_perf.py profile \
+  --remote spacemit-k1 --platform spacemit-k1-a60 --cpu 0 \
   --kernel q4_0-q8_0-IME-m8b \
   --m 480 --n 1536 --k 1536 \
   --warmup 2 --samples 1 --iterations 20 \
@@ -118,17 +119,17 @@ python3 tools/ime_perf/ime_perf.py profile \
 The default artifact path is:
 
 ```text
-tools/ime_perf/.artifacts/perf-cpu-clock/<timestamp>-<kernel>-m<m>-n<n>-k<k>/
+tools/pfng_perf/.artifacts/perf-cpu-clock/<timestamp>-<kernel>-m<m>-n<n>-k<k>/
 ```
 
 Rebuild reports from an existing artifact without contacting the target:
 
 ```bash
-python3 tools/ime_perf/ime_perf.py report tools/ime_perf/.artifacts/perf-cpu-clock/<run>
+python3 tools/pfng_perf/pfng_perf.py report tools/pfng_perf/.artifacts/perf-cpu-clock/<run>
 ```
 
 For another kernel, add its instruction ranges to
-`tools/ime_perf/perf-regions.json`. Each kernel entry must bind regions to the
+`tools/pfng_perf/perf-regions.json`. Each kernel entry must bind regions to the
 exact annotated DSO and demangled symbol; an address alone is unsafe because
 different ELF images can reuse the same relative address. Address ranges are
 tied to the exact binary and must be refreshed whenever code generation
@@ -165,7 +166,7 @@ run-*/perf-report.txt
 run-*/perf-annotate.txt
 run-*/benchmark.stdout
 run-*/environment.txt
-run-*/ime-llama-bench      # exact profiled binary
+run-*/pfng-bench          # exact profiled binary
 summary.json
 summary.md
 ```
@@ -176,7 +177,7 @@ run records `parser_diagnostics` in `summary.json`, and missing sections,
 invalid data, or percentages over the valid local-period total are surfaced
 in the summary warnings instead of being silently treated as valid samples.
 
-`tools/ime_perf/ime_perf.py` intentionally uses only Python's standard library. New
+`tools/pfng_perf/pfng_perf.py` intentionally uses only Python's standard library. New
 sampling events, call-graph modes, kernels, and region maps can be added
 without changing benchmark or kernel source. The artifact manifest is versioned
 so future report formats can be introduced without losing the raw evidence.

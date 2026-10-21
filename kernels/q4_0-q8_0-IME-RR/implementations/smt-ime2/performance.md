@@ -80,5 +80,5 @@ thread, as follows. One iteration is one execution of the `L74-L121` loop body.
 alone hold ~33% of the kernel's samples. `L76-96` is activation-load-latency bound;
 the scalar instruction after the first `vl1r.v` is the skid target of that load
 miss. Full method, address map, evidence and caveats are in
-[2026-09-29-rr-per-region-cycles.md](../../../docs/2026-09-29-rr-per-region-cycles.md).
+[2026-09-29-rr-per-region-cycles.md](../../../../docs/2026-09-29-rr-per-region-cycles.md).
 

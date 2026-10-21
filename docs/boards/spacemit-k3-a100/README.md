@@ -88,8 +88,8 @@ A100 的 cpufreq governor 是 `userspace`，频率固定在 1.8 GHz，不会自�
 CXX=/home/linkai/projects/triton-riscv/llvm-project-spacemit-x60/builders/x86-k3/llvm/bin/clang++
 ```
 
-这些基准不接入 pfng 的 CMake 工程（pfng 的平台 profile 目前只覆盖
-`spacemit-k1-*`），而是用一个独立脚本静态编译：
+这些基准不接入 pfng 的 CMake 工程（`platforms/` 已有 `spacemit-k3-a100`
+profile，但本目录的微基准仍保持独立），而是用一个独立脚本静态编译：
 
 ```bash
 cd machine-benchmarks/spacemit-k3-a100

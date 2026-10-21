@@ -8,6 +8,11 @@ Unless noted otherwise, measurements use `M=480`, `N=1536`, `K=1536`, a CMake
 Release build with a fixed 256-bit vector length, and are pinned to CPU 0 on
 `spacemit-k1`.
 
+K3 / A100 results are recorded beside each implementation under
+`kernels/<kernel>/implementations/smt-ime2/performance.md`. Their utilization
+denominator is the A100 matrix-unit peak, not the K1 128 FMA/cycle peak used
+below.
+
 ## q4_0-q8_0-IME-m8b
 
 | Date | Kernel | Change | Compute-unit utilization |

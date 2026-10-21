@@ -10,7 +10,7 @@ pfng_declare_kernel(
     NAME "Q4_0 x Q8_0 IME M8 batch reduction"
     QUANTIZATION WeightQ4_0ActivationQ8_0
     REGISTER_FUNCTION register_q4_0_ime_m8b
-    PLATFORMS spacemit-k1-a60)
+    PLATFORMS spacemit-k1-a60 spacemit-k3-a100)
 ```
 
 The platform list is fail-closed: do not add a platform until its implementation
@@ -39,6 +39,10 @@ kernels/<kernel-id>/
       adapter.cpp
       kernel.cpp
       kernel.h
+    smt-ime2/                       # IME2 (K3 / A100)
+      adapter.cpp
+      kernel.cpp
+      kernel.h
     spacemit-k1-a60/                # board/cache-specific implementation
       adapter.cpp
       performance.md
@@ -53,14 +57,19 @@ built-in registration calls from the enabled declarations.
 some have an exact 256-bit layout and enforce `vlenb == 32`. The plain `rvv`
 directory is reserved for implementations without that minimum requirement.
 
-RVV kernels declare both `spacemit-k1-a60` and `spacemit-k1-x60`. IME kernels
-declare only `spacemit-k1-a60`, because the X60 target profile does not include
-`xsmtvdot`. Cache-blocked implementations remain A60-specific because they
-embed assumptions about that target's cache size.
+RVV kernels declare both `spacemit-k1-a60` and `spacemit-k1-x60`. IME1 kernels
+declare `spacemit-k1-a60`, because the X60 target profile does not include
+`xsmtvdot`. IME2 kernels declare `spacemit-k3-a100`, whose A100 cores provide
+`xsmtvdotii` and a fixed 1024-bit vector length. Kernels with both IME
+generations (`q4_0-q8_0-IME-m8b` and `q4_0-q8_0-IME-upstream`) declare A60 and
+A100 and pick `smt-ime1` or `smt-ime2` in their local `CMakeLists.txt`.
+Cache-blocked implementations remain A60-specific because they embed assumptions
+about that target's cache size.
 
-The two target profiles are independent and each declares its complete
-compiler, ISA, Device Tree, performance, and CPU-range metadata. Equal values
-between the profiles are intentional duplication, not shared defaults.
+The target profiles are independent and each declares its complete compiler,
+ISA, Device Tree, performance, CPU-range, and optional deployment-prologue
+metadata. Equal values between profiles are intentional duplication, not shared
+defaults.
 
 ## Imported implementations
 

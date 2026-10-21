@@ -1,8 +1,8 @@
 # SpacemiT K3 / A100 machine benchmarks
 
-这些是独立的板级微基准，**不接入 pfng 的 CMake 工程**（`platforms/` 目前只
-定义了 `spacemit-k1-a60` 和 `spacemit-k1-x60`）。用 `build.sh` 直接交叉编译
-成静态可执行文件，输出到 `out/`。
+这些是独立的板级微基准，**不接入 pfng 的 CMake 工程**（`platforms/` 已有
+`spacemit-k3-a100` profile，但本目录的微基准仍用独立脚本构建）。用 `build.sh`
+直接交叉编译成静态可执行文件，输出到 `out/`。
 
 实测结果记录在 [docs/boards/spacemit-k3-a100/](../../docs/boards/spacemit-k3-a100/)。
 

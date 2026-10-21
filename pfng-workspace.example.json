@@ -5,6 +5,9 @@
     },
     "spacemit-k1-x60": {
       "cxx": "/absolute/path/to/clang++"
+    },
+    "spacemit-k3-a100": {
+      "cxx": "/absolute/path/to/clang++"
     }
   }
 }
